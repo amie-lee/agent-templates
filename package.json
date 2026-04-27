@@ -1,0 +1,17 @@
+{
+  "name": "agent-init",
+  "version": "1.0.0",
+  "description": "Scaffold a multi-agent development project. Generates PLAN.md and agent prompt files.",
+  "main": "agent-init.js",
+  "bin": {
+    "agent-init": "./agent-init.js"
+  },
+  "scripts": {
+    "test": "node agent-init.js test-project && ls -la test-project/ && rm -rf test-project"
+  },
+  "keywords": ["agent", "ai", "scaffold", "project-init", "multi-agent"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=16"
+  }
+}
