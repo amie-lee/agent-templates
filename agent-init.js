@@ -27,6 +27,11 @@ const AGENT_FILES = [
   "agent-qa.md",
 ];
 
+const ROOT_TEMPLATE_FILES = [
+  { src: "orchestrate.template.js", dest: "orchestrate.js" },
+  { src: "CLAUDE.template.md",      dest: "CLAUDE.md" },
+];
+
 const INITIAL_CYCLE_STATE = {
   phase: "init",
   completed: [],
@@ -35,7 +40,11 @@ const INITIAL_CYCLE_STATE = {
   artifacts: {
     "PLAN.md": false,
     "design-spec.md": false,
+    "design-tokens.md": false,
+    "api-spec.yaml": false,
+    "api-samples.sh": false,
     "api-contract.md": false,
+    "verify-report.json": false,
     "qa-report.md": false,
   },
 };
@@ -124,7 +133,19 @@ function main() {
     }
   }
 
-  // 4. Write cycle-state.json
+  // 4. Copy root template files (orchestrate.js, CLAUDE.md)
+  for (const { src, dest } of ROOT_TEMPLATE_FILES) {
+    const srcPath = path.join(__dirname, src);
+    const destPath = path.join(projectDir, dest);
+    if (fs.existsSync(srcPath)) {
+      fs.copyFileSync(srcPath, destPath);
+      log(green(`✓`) + ` Copied ${dest}`);
+    } else {
+      log(yellow(`⚠`) + ` ${src} not found — skipped`);
+    }
+  }
+
+  // 6. Write cycle-state.json
   const state = {
     ...INITIAL_CYCLE_STATE,
     projectName,
@@ -136,19 +157,21 @@ function main() {
   );
   log(green(`✓`) + ` Created cycle-state.json`);
 
-  // 5. Create .gitignore
-  const gitignore = `.env\n.env.local\nnode_modules/\n.DS_Store\n`;
+  // 7. Create .gitignore
+  const gitignore = `.env\n.env.local\nnode_modules/\n.DS_Store\n.current-agent\nlighthouse-report.json\n`;
   fs.writeFileSync(path.join(projectDir, ".gitignore"), gitignore);
   log(green(`✓`) + ` Created .gitignore`);
 
-  // 6. Print summary
+  // 8. Print summary
   log("");
   log(bold(`🚀 Project "${projectName}" initialized`));
   log("");
   log(`  ${cyan("Structure:")}`)
   log(`  ${dirName}/`);
   log(`  ├── PLAN.md          ← Fill this in first`);
-  log(`  ├── cycle-state.json ← Orchestrator reads this`);
+  log(`  ├── orchestrate.js   ← Pipeline controller`);
+  log(`  ├── CLAUDE.md        ← Claude Code auto-pipeline rules`);
+  log(`  ├── cycle-state.json ← Phase tracking`);
   log(`  ├── .gitignore`);
   log(`  └── agents/`);
   for (const f of AGENT_FILES) {
@@ -160,12 +183,17 @@ function main() {
   log(`  ${cyan("Next steps:")}`);
   log(`  1. cd ${dirName}`);
   log(`  2. Open PLAN.md and fill in every [TODO] field`);
-  log(`  3. Pass PLAN.md to the Orchestrator agent (agents/agent-orchestrator.md)`);
-  log(`  4. Orchestrator will dispatch PM → Design → Frontend+Backend → QA`);
+  log(`  3. Run the full pipeline:`);
+  log(`     node orchestrate.js run`);
+  log(`  4. Or step by step:`);
+  log(`     node orchestrate.js status`);
+  log(`     node orchestrate.js validate <agent>`);
+  log(`     node orchestrate.js advance <agent>`);
+  log(`  5. When all agents complete:`);
+  log(`     node orchestrate.js done`);
   log("");
-  log(`  ${cyan("Tip:")} Run the Orchestrator with:`);
-  log(`  "Read cycle-state.json and agents/agent-orchestrator.md.`);
-  log(`   The project is in phase: init. What should happen next?"`);
+  log(`  ${cyan("Tip:")} After frontend agent, run verify before advance:`);
+  log(`     node orchestrate.js verify`);
   log("");
 }
 
