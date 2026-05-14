@@ -23,22 +23,24 @@ Produces: PLAN.md
 [Design Agent]
 Produces: design-spec.md, design-tokens.md
     │
-    ├──────────────────────┐
-    ▼                      ▼
-[Frontend Agent]    [Backend Agent]
-Produces:           Produces:
-- /src/components   - /src/routes
-- api-contract.md   - /src/services
-    │                      │
-    └──────────┬───────────┘
-               ▼ (requires: both agents done)
-          [QA Agent]
-          Produces: qa-report.md
-               │
-               ▼ (requires: 0 critical bugs)
-          [Orchestrator]
-          Produces: DONE.md
+    ▼ (requires: PLAN.md)
+[Backend Agent]
+Produces: api-spec.yaml, api-samples.sh, schema.sql
+    │
+    ▼ (requires: PLAN.md + design-spec.md + api-spec.yaml)
+[Frontend Agent]
+Produces: /src/, api-contract.md, verify-report.json
+    │
+    ▼ (requires: PLAN.md + api-spec.yaml + verify-report.json)
+[QA Agent]
+Produces: qa-report.md, e2e/stories.spec.ts
+    │
+    ▼ (requires: 0 critical bugs)
+[Orchestrator]
+Produces: DONE.md
 ```
+
+Note: Backend runs before Frontend because Frontend's validate() requires `api-spec.yaml`.
 
 ## Dispatch Protocol
 Before dispatching any agent, verify:
@@ -47,9 +49,9 @@ Before dispatching any agent, verify:
 |-------|-----------------|
 | PM | User request |
 | Design | PLAN.md |
-| Frontend | PLAN.md + design-spec.md |
-| Backend | PLAN.md + api-contract.md (draft from Frontend) |
-| QA | PLAN.md + api-contract.md + running app |
+| Backend | PLAN.md |
+| Frontend | PLAN.md + design-spec.md + api-spec.yaml |
+| QA | PLAN.md + api-spec.yaml + verify-report.json + running app |
 
 If a required input is missing, **do not dispatch**. Instead, output:
 ```
@@ -59,17 +61,20 @@ Waiting on: [Agent that should produce it]
 ```
 
 ## State Tracking
-Maintain a `cycle-state.json` after each agent completes:
+Maintain a `cycle-state.json` after each agent completes. Use `node orchestrate.js advance <agent>` to update it:
 ```json
 {
   "phase": "qa",
-  "completed": ["pm", "design", "frontend", "backend"],
+  "completed": ["pm", "design", "backend", "frontend"],
   "pending": ["qa"],
   "blockers": [],
   "artifacts": {
     "PLAN.md": true,
     "design-spec.md": true,
+    "api-spec.yaml": true,
+    "api-samples.sh": true,
     "api-contract.md": true,
+    "verify-report.json": true,
     "qa-report.md": false
   }
 }
@@ -77,7 +82,7 @@ Maintain a `cycle-state.json` after each agent completes:
 
 ## Behavioral Rules
 1. **Never skip a phase.** Even if the user says "just build it", run PM first.
-2. **Parallel when safe.** Frontend and Backend can run in parallel after Design completes.
+2. **Sequential after Design.** Backend runs before Frontend. Frontend's validate() requires `api-spec.yaml` from Backend.
 3. **QA is always last.** Never let QA start before both Frontend and Backend complete.
 4. **Escalate, don't guess.** If an agent produces an unexpected output, surface the discrepancy to the user rather than interpreting it.
 5. **One cycle = one PLAN.md.** Scope changes mid-cycle require a new PM agent pass to update PLAN.md before continuing.
@@ -92,8 +97,11 @@ Maintain a `cycle-state.json` after each agent completes:
 ## Artifacts
 - PLAN.md
 - design-spec.md
+- api-spec.yaml
 - api-contract.md
+- verify-report.json
 - qa-report.md (N passed, 0 critical bugs)
+- e2e/stories.spec.ts
 
 ## Known Limitations
 - Items deferred to next cycle
