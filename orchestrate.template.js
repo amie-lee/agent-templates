@@ -5,12 +5,13 @@
  * Usage: node orchestrate.js <command> [arg]
  *
  * Commands:
- *   status              — show current cycle-state.json
- *   validate <agent>    — check if agent's required inputs exist
- *   advance <agent>     — mark agent complete, update state
- *   verify              — run typecheck, build, test, lighthouse
- *   run                 — automated pipeline (polls for each advance)
- *   done                — produce DONE.md
+ *   status                  — show current cycle-state.json
+ *   validate <agent>        — check if agent's required inputs exist
+ *   advance <agent>         — mark agent complete, update state
+ *   checkpoint <A|B>        — record human approval at a checkpoint
+ *   verify                  — run typecheck, build, test, lighthouse
+ *   run                     — automated pipeline (polls for each advance)
+ *   done                    — produce DONE.md
  */
 
 const fs = require('fs');
@@ -18,16 +19,33 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 // ─── Agent contracts ──────────────────────────────────────────────────────────
-// Note: Backend precedes Frontend because frontend requires api-spec.yaml
+// Pipeline: spec → arch → [CHECKPOINT A] → pm → design∥backend → frontend → qa → [CHECKPOINT B]
+// Design and Backend run in parallel — both depend only on PLAN.md.
 
 const AGENT_CONTRACTS = {
+  spec: {
+    requires: [],  // first agent — only needs user input (natural language, no files)
+    produces: ['requirements.md', 'use-cases.md', 'intent.md'],
+  },
+  arch: {
+    requires: ['requirements.md', 'intent.md'],
+    produces: ['architecture-decision.md'],
+    beforeCheckpoint: 'A',  // CHECKPOINT A happens after arch completes
+  },
+  pm: {
+    requires: ['requirements.md', 'use-cases.md', 'architecture-decision.md'],
+    produces: ['PLAN.md'],
+    afterCheckpoint: 'A',   // PM can only run after CHECKPOINT A is approved
+  },
   design: {
     requires: ['PLAN.md'],
     produces: ['design-spec.md', 'design-tokens.md'],
+    parallel: 'backend',    // runs simultaneously with backend
   },
   backend: {
     requires: ['PLAN.md'],
     produces: ['api-spec.yaml', 'api-samples.sh', 'schema.sql'],
+    parallel: 'design',     // runs simultaneously with design
   },
   frontend: {
     requires: ['PLAN.md', 'design-spec.md', 'api-spec.yaml'],
@@ -36,10 +54,12 @@ const AGENT_CONTRACTS = {
   qa: {
     requires: ['PLAN.md', 'api-spec.yaml', 'verify-report.json'],
     produces: ['qa-report.md'],
+    beforeCheckpoint: 'B',  // CHECKPOINT B happens after qa completes
   },
 };
 
-const AGENT_PIPELINE = ['pm', 'design', 'backend', 'frontend', 'qa'];
+// Linear pipeline for sequential dispatch (design/backend parallelism handled separately)
+const AGENT_PIPELINE = ['spec', 'arch', 'pm', 'design', 'backend', 'frontend', 'qa'];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -84,6 +104,11 @@ function cmd_status() {
     console.log(`Blockers:  ${state.blockers.join(', ')}`);
   }
 
+  const checkpoints = state.checkpoints || {};
+  console.log('\nCheckpoints:');
+  console.log(`  ${checkpoints.A === 'approved' ? '✓' : '○'} CHECKPOINT A — Scope + Architecture approval (before PM)`);
+  console.log(`  ${checkpoints.B === 'approved' ? '✓' : '○'} CHECKPOINT B — Sprint review (before DONE)`);
+
   console.log('\nArtifacts:');
   for (const [artifact, recorded] of Object.entries(state.artifacts || {})) {
     const exists = fileExists(artifact);
@@ -101,23 +126,42 @@ function cmd_validate(agent) {
     process.exit(1);
   }
 
-  if (agent === 'pm') {
-    console.log('✓ pm has no file prerequisites — ready to run');
-    process.exit(0);
-  }
-
   const contract = AGENT_CONTRACTS[agent];
   if (!contract) {
     console.error(`Unknown agent: ${agent}`);
-    console.error(`Valid agents: pm, ${Object.keys(AGENT_CONTRACTS).join(', ')}`);
+    console.error(`Valid agents: ${Object.keys(AGENT_CONTRACTS).join(', ')}`);
     process.exit(1);
+  }
+
+  // spec agent has no file prerequisites
+  if (agent === 'spec') {
+    console.log('✓ spec has no file prerequisites — ready to run');
+    process.exit(0);
+  }
+
+  // Check if a required checkpoint must be approved first
+  if (contract.afterCheckpoint) {
+    const state = readState();
+    const cpStatus = (state.checkpoints || {})[contract.afterCheckpoint];
+    if (cpStatus !== 'approved') {
+      console.log('PIPELINE STOPPED');
+      console.log(`Agent: ${agent}`);
+      console.log(`Waiting on: CHECKPOINT ${contract.afterCheckpoint} — human approval required`);
+      console.log(`Action needed: Review outputs, then run: node orchestrate.js checkpoint ${contract.afterCheckpoint}`);
+      process.exit(1);
+    }
   }
 
   const missing = contract.requires.filter(f => !fileExists(f));
 
   if (missing.length === 0) {
     console.log(`✓ ${agent} is ready to run`);
-    console.log(`  Requires: ${contract.requires.join(', ')}`);
+    if (contract.requires.length > 0) {
+      console.log(`  Requires: ${contract.requires.join(', ')}`);
+    }
+    if (contract.parallel) {
+      console.log(`  ↔ Runs in parallel with: ${contract.parallel}`);
+    }
     process.exit(0);
   } else {
     console.log('PIPELINE STOPPED');
@@ -125,6 +169,31 @@ function cmd_validate(agent) {
     console.log(`Missing: ${missing.join(', ')}`);
     console.log(`Action needed: Create or fill in the missing files listed above`);
     process.exit(1);
+  }
+}
+
+function cmd_checkpoint(label) {
+  if (!label || !['A', 'B'].includes(label.toUpperCase())) {
+    console.error('Usage: node orchestrate.js checkpoint <A|B>');
+    console.error('  A — approve scope + architecture (before PM agent)');
+    console.error('  B — approve sprint result (before DONE)');
+    process.exit(1);
+  }
+  const cp = label.toUpperCase();
+  const state = readState();
+  state.checkpoints = state.checkpoints || {};
+  state.checkpoints[cp] = 'approved';
+  writeState(state);
+
+  const descriptions = {
+    A: 'Scope + architecture approved. PM Agent may now run.',
+    B: 'Sprint result approved. Ready to produce DONE.md.',
+  };
+  console.log(`✓ CHECKPOINT ${cp} approved — ${descriptions[cp]}`);
+  if (cp === 'A') {
+    console.log('  Next: node orchestrate.js validate pm');
+  } else if (cp === 'B') {
+    console.log('  Next: node orchestrate.js done');
   }
 }
 
@@ -335,22 +404,25 @@ ${artifactList || '- (none recorded)'}
 const [, , command, arg] = process.argv;
 
 switch (command) {
-  case 'status':   cmd_status();        break;
-  case 'validate': cmd_validate(arg);   break;
-  case 'advance':  cmd_advance(arg);    break;
-  case 'verify':   cmd_verify();        break;
-  case 'run':      cmd_run();           break;
-  case 'done':     cmd_done();          break;
+  case 'status':     cmd_status();           break;
+  case 'validate':   cmd_validate(arg);      break;
+  case 'advance':    cmd_advance(arg);       break;
+  case 'checkpoint': cmd_checkpoint(arg);    break;
+  case 'verify':     cmd_verify();           break;
+  case 'run':        cmd_run();              break;
+  case 'done':       cmd_done();             break;
   default:
     console.log('Usage: node orchestrate.js <command>');
     console.log('Commands:');
-    console.log('  status              — show current pipeline state');
+    console.log('  status              — show current pipeline state + checkpoints');
     console.log('  validate <agent>    — check if agent inputs are ready');
     console.log('  advance <agent>     — mark agent complete, move to next');
+    console.log('  checkpoint <A|B>    — record human approval at a pipeline checkpoint');
     console.log('  verify              — run typecheck, build, test, lighthouse');
     console.log('  run                 — automated pipeline (polls for each advance)');
     console.log('  done                — produce DONE.md');
     console.log('');
-    console.log(`Valid agents: pm, ${Object.keys(AGENT_CONTRACTS).join(', ')}`);
+    console.log(`Valid agents: ${Object.keys(AGENT_CONTRACTS).join(', ')}`);
+    console.log('Checkpoints: A (scope + architecture), B (sprint review)');
     process.exit(1);
 }

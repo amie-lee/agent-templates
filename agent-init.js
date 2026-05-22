@@ -20,6 +20,8 @@ const path = require("path");
 
 const AGENT_FILES = [
   "agent-orchestrator.md",
+  "agent-spec.md",
+  "agent-arch.md",
   "agent-pm.md",
   "agent-design.md",
   "agent-frontend.md",
@@ -30,14 +32,24 @@ const AGENT_FILES = [
 const ROOT_TEMPLATE_FILES = [
   { src: "orchestrate.template.js", dest: "orchestrate.js" },
   { src: "CLAUDE.template.md",      dest: "CLAUDE.md" },
+  { src: "requirements.template.md", dest: "requirements.md" },
+  { src: "use-cases.template.md",    dest: "use-cases.md" },
 ];
 
 const INITIAL_CYCLE_STATE = {
   phase: "init",
   completed: [],
-  pending: ["pm"],
+  pending: ["spec"],
   blockers: [],
+  checkpoints: {
+    A: "pending",  // human approves scope + architecture before PM runs
+    B: "pending",  // human approves sprint result before DONE
+  },
   artifacts: {
+    "requirements.md": false,
+    "use-cases.md": false,
+    "intent.md": false,
+    "architecture-decision.md": false,
     "PLAN.md": false,
     "design-spec.md": false,
     "design-tokens.md": false,
@@ -87,6 +99,7 @@ function main() {
 
   const projectDir = path.join(process.cwd(), dirName);
   const agentsDir = path.join(projectDir, "agents");
+  const adrDir = path.join(projectDir, "adr");
 
   // 1. Create project directory
   if (fs.existsSync(projectDir)) {
@@ -96,8 +109,10 @@ function main() {
 
   fs.mkdirSync(projectDir, { recursive: true });
   fs.mkdirSync(agentsDir, { recursive: true });
+  fs.mkdirSync(adrDir, { recursive: true });
   log(green(`✓`) + ` Created ${dirName}/`);
   log(green(`✓`) + ` Created ${dirName}/agents/`);
+  log(green(`✓`) + ` Created ${dirName}/adr/`);
 
   // 2. Generate PLAN.md from template
   const templatePath = path.join(__dirname, "PLAN.template.md");
@@ -162,17 +177,26 @@ function main() {
   fs.writeFileSync(path.join(projectDir, ".gitignore"), gitignore);
   log(green(`✓`) + ` Created .gitignore`);
 
+  // Write ADR index placeholder
+  const adrIndex = `# ADR Index — ${projectName}\n> Architecture Decision Records. Each significant decision gets its own file.\n> Format: ADR-NNN-short-title.md\n\n| ID | Title | Status | Date |\n|----|-------|--------|------|\n| ADR-001 | Architecture Decision | pending | — |\n`;
+  fs.writeFileSync(path.join(adrDir, "ADR-000-index.md"), adrIndex);
+  log(green(`✓`) + ` Created adr/ADR-000-index.md`);
+
   // 8. Print summary
   log("");
   log(bold(`🚀 Project "${projectName}" initialized`));
   log("");
-  log(`  ${cyan("Structure:")}`)
+  log(`  ${cyan("Structure:")}`);
   log(`  ${dirName}/`);
-  log(`  ├── PLAN.md          ← Fill this in first`);
-  log(`  ├── orchestrate.js   ← Pipeline controller`);
-  log(`  ├── CLAUDE.md        ← Claude Code auto-pipeline rules`);
-  log(`  ├── cycle-state.json ← Phase tracking`);
+  log(`  ├── requirements.md       ← Spec Agent fills this in`);
+  log(`  ├── use-cases.md          ← Spec Agent fills this in`);
+  log(`  ├── PLAN.md               ← PM Agent fills this in`);
+  log(`  ├── orchestrate.js        ← Pipeline controller`);
+  log(`  ├── CLAUDE.md             ← Claude Code auto-pipeline rules`);
+  log(`  ├── cycle-state.json      ← Phase tracking`);
   log(`  ├── .gitignore`);
+  log(`  ├── adr/`);
+  log(`  │   └── ADR-000-index.md`);
   log(`  └── agents/`);
   for (const f of AGENT_FILES) {
     if (fs.existsSync(path.join(agentsDir, f))) {
@@ -182,8 +206,10 @@ function main() {
   log("");
   log(`  ${cyan("Next steps:")}`);
   log(`  1. cd ${dirName}`);
-  log(`  2. Open PLAN.md and fill in every [TODO] field`);
-  log(`  3. Run the full pipeline:`);
+  log(`  2. Run the Spec Agent with your project request:`);
+  log(`     → Hand agent-spec.md to Claude with your idea`);
+  log(`     → It produces: requirements.md, use-cases.md, intent.md`);
+  log(`  3. Run the pipeline:`);
   log(`     node orchestrate.js run`);
   log(`  4. Or step by step:`);
   log(`     node orchestrate.js status`);
@@ -192,6 +218,7 @@ function main() {
   log(`  5. When all agents complete:`);
   log(`     node orchestrate.js done`);
   log("");
+  log(`  ${cyan("Pipeline order:")} spec → arch → [CHECKPOINT A] → pm → design∥backend → frontend → qa → [CHECKPOINT B] → done`);
   log(`  ${cyan("Tip:")} After frontend agent, run verify before advance:`);
   log(`     node orchestrate.js verify`);
   log("");

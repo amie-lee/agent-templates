@@ -11,21 +11,30 @@ node agent-init.js my-project
 ## What it does
 
 Initializes a project directory with:
-- A `PLAN.md` template (the single source of truth for all agents)
+- `requirements.md` + `use-cases.md` templates — Spec Agent fills these in before any development
+- A `PLAN.md` template — PM Agent fills this in after architecture is decided
 - A prompt file for each agent role (`/agents/`)
-- `orchestrate.js` — pipeline controller with status, validate, advance, verify, run, and done commands
+- `orchestrate.js` — pipeline controller with status, validate, advance, checkpoint, verify, run, and done commands
 - `CLAUDE.md` — auto-pipeline rules for Claude Code
+- `adr/` — Architecture Decision Records folder
 - A `cycle-state.json` for tracking progress
 
 ```
 my-project/
-├── PLAN.md
-├── orchestrate.js   ← pipeline controller
-├── CLAUDE.md        ← Claude Code auto-pipeline rules
+├── requirements.md       ← Spec Agent output (requirements + use cases)
+├── use-cases.md          ← Spec Agent output
+├── PLAN.md               ← PM Agent output (after arch decision)
+├── orchestrate.js        ← pipeline controller
+├── CLAUDE.md             ← Claude Code auto-pipeline rules
 ├── cycle-state.json
 ├── .gitignore
+├── adr/
+│   ├── ADR-000-index.md
+│   └── ADR-001-architecture.md  ← Architecture Agent output
 └── agents/
     ├── agent-orchestrator.md
+    ├── agent-spec.md       ← NEW
+    ├── agent-arch.md       ← NEW
     ├── agent-pm.md
     ├── agent-design.md
     ├── agent-frontend.md
@@ -41,10 +50,14 @@ my-project/
 User request
     │
     ▼
-PM → Design → Backend → Frontend → QA → Done
+Spec → Arch → [CHECKPOINT A: human approves] → PM → Design∥Backend → Frontend → QA → [CHECKPOINT B: human approves] → Done
 ```
 
-Backend runs before Frontend because Frontend's `validate()` requires `api-spec.yaml` from Backend.
+- **Spec** extracts requirements, use cases, and project intent before any planning
+- **Arch** picks the architecture and records the decision (ADR-001) before any planning
+- **CHECKPOINT A** is a hard stop — human reviews scope and architecture before development begins
+- **Design and Backend run in parallel** — both depend only on PLAN.md
+- **CHECKPOINT B** is a hard stop — human reviews the sprint result before shipping
 
 Each agent has a defined input contract (what it needs) and output contract (what it must produce). `orchestrate.js` enforces the handoff order and blocks dispatch if a required artifact is missing.
 
@@ -57,18 +70,33 @@ Each agent has a defined input contract (what it needs) and output contract (wha
 node agent-init.js your-project-name
 ```
 
-**2. Fill in PLAN.md**
+**2. Run the Spec Agent**
 
-Every `[TODO]` field. This is the only manual step — the rest flows from here.
+Hand `agents/agent-spec.md` to Claude with your project idea. It will ask clarifying questions and produce:
+- `requirements.md` — structured functional + non-functional requirements
+- `use-cases.md` — actor map and use case flows
+- `intent.md` — project type, scale, quality priorities
 
-**3. Run the automated pipeline**
+**3. Run the Architecture Agent**
+
+Hand `agents/agent-arch.md` to Claude with `requirements.md` + `intent.md`. It will produce:
+- `architecture-decision.md` (ADR-001) — chosen architecture + tech stack
+
+**4. CHECKPOINT A — human review**
+
+Review `requirements.md` and `architecture-decision.md`. When approved:
+```bash
+node orchestrate.js checkpoint A
+```
+
+**5. Run the automated pipeline**
 
 ```bash
 cd your-project-name
 node orchestrate.js run
 ```
 
-`orchestrate.js run` dispatches each agent in order, polling `cycle-state.json` for completion. After each agent finishes, run:
+After each agent finishes, run:
 ```bash
 node orchestrate.js advance <agent-name>
 ```
@@ -79,8 +107,11 @@ node orchestrate.js verify
 node orchestrate.js advance frontend
 ```
 
-When all agents are done:
+**6. CHECKPOINT B — sprint review**
+
+Review `qa-report.md`. When approved:
 ```bash
+node orchestrate.js checkpoint B
 node orchestrate.js done   # produces DONE.md
 ```
 
@@ -90,10 +121,11 @@ node orchestrate.js done   # produces DONE.md
 
 | Command | What it does |
 |---------|-------------|
-| `status` | Show current phase, completed agents, and artifact checklist |
+| `status` | Show current phase, checkpoints, completed agents, and artifact checklist |
 | `validate <agent>` | Check if all required inputs exist; print BLOCKED if not |
 | `advance <agent>` | Mark agent complete, update phase, move to next |
-| `verify` | Run `tsc --noEmit`, `npm run build`, `npm run test -- --run`, and Lighthouse (if dev server is up); writes `verify-report.json` |
+| `checkpoint <A\|B>` | Record human approval at a pipeline checkpoint |
+| `verify` | Run `tsc --noEmit`, `npm run build`, `npm run test -- --run`, and Lighthouse; writes `verify-report.json` |
 | `run` | Automated pipeline — dispatches agents in order, polls for each `advance` |
 | `done` | Generate `DONE.md` with artifact and completion summary |
 
@@ -101,14 +133,16 @@ node orchestrate.js done   # produces DONE.md
 
 ## Agent roles
 
-| Agent | Produces |
-|-------|----------|
-| `agent-pm.md` | `PLAN.md` — scope, user stories, milestones |
-| `agent-design.md` | `design-spec.md`, `design-tokens.md` |
-| `agent-backend.md` | `api-spec.yaml` (OpenAPI 3.0), `api-samples.sh`, `schema.sql` |
-| `agent-frontend.md` | `/src` (components, hooks, tests), `api-contract.md` |
-| `agent-qa.md` | `qa-report.md`, `e2e/stories.spec.ts` (Playwright) |
-| `agent-orchestrator.md` | `DONE.md` |
+| Agent | Phase | Produces |
+|-------|-------|----------|
+| `agent-spec.md` | Pre-dev | `requirements.md`, `use-cases.md`, `intent.md` |
+| `agent-arch.md` | Pre-dev | `architecture-decision.md` (ADR-001) |
+| `agent-pm.md` | Planning | `PLAN.md` — scope, user stories, milestones |
+| `agent-design.md` | Dev (parallel) | `design-spec.md`, `design-tokens.md` |
+| `agent-backend.md` | Dev (parallel) | `api-spec.yaml` (OpenAPI 3.0), `api-samples.sh`, `schema.sql` |
+| `agent-frontend.md` | Dev | `/src` (components, hooks, tests), `api-contract.md` |
+| `agent-qa.md` | QA | `qa-report.md`, `e2e/stories.spec.ts` (Playwright) |
+| `agent-orchestrator.md` | Done | `DONE.md` |
 
 ---
 
