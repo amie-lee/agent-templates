@@ -72,10 +72,10 @@ node agent-init.js your-project-name
 
 **2. Run the Spec Agent**
 
-Hand `agents/agent-spec.md` to Claude with your project idea. It will ask clarifying questions and produce:
-- `requirements.md` — structured functional + non-functional requirements
-- `use-cases.md` — actor map and use case flows
-- `intent.md` — project type, scale, quality priorities
+Hand `agents/agent-spec.md` to Claude with your project idea. The agent runs in this order:
+1. Writes `intake.md` — pastes your request verbatim, writes its interpretation, asks clarifying questions
+2. Waits for you to confirm the interpretation is correct
+3. Produces `requirements.md`, `use-cases.md`, `intent.md` after confirmation
 
 **3. Run the Architecture Agent**
 
@@ -135,7 +135,7 @@ node orchestrate.js done   # produces DONE.md
 
 | Agent | Phase | Produces |
 |-------|-------|----------|
-| `agent-spec.md` | Pre-dev | `requirements.md`, `use-cases.md`, `intent.md` |
+| `agent-spec.md` | Pre-dev | `intake.md` (first), `requirements.md`, `use-cases.md`, `intent.md` |
 | `agent-arch.md` | Pre-dev | `architecture-decision.md` (ADR-001) |
 | `agent-pm.md` | Planning | `PLAN.md` — scope, user stories, milestones |
 | `agent-design.md` | Dev (parallel) | `design-spec.md`, `design-tokens.md` |

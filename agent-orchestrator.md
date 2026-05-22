@@ -17,9 +17,10 @@ User Request
     │
     ▼
 [Spec Agent]
-Produces: requirements.md, use-cases.md, intent.md
+Step 1: intake.md (raw request + Q&A + confirmed intent) — human confirms before proceeding
+Step 2: requirements.md, use-cases.md, intent.md
     │
-    ▼ (requires: requirements.md + intent.md)
+    ▼ (requires: intake.md + requirements.md + intent.md)
 [Architecture Agent]
 Produces: architecture-decision.md (ADR-001)
     │
@@ -60,8 +61,8 @@ Before dispatching any agent, verify:
 
 | Agent | Required inputs |
 |-------|-----------------|
-| Spec | User request (raw) |
-| Architecture | requirements.md + intent.md |
+| Spec | User request (raw) → produces intake.md first, then rest |
+| Architecture | intake.md + requirements.md + intent.md |
 | PM | requirements.md + use-cases.md + architecture-decision.md |
 | Design | PLAN.md *(parallel with Backend)* |
 | Backend | PLAN.md *(parallel with Design)* |

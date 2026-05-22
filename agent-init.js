@@ -35,6 +35,7 @@ const ROOT_TEMPLATE_FILES = [
   { src: "requirements.template.md", dest: "requirements.md" },
   { src: "use-cases.template.md",    dest: "use-cases.md" },
   { src: "adr.template.md",          dest: "adr/adr.template.md" },
+  { src: "intake.template.md",       dest: "intake.md" },
 ];
 
 const INITIAL_CYCLE_STATE = {
@@ -47,6 +48,7 @@ const INITIAL_CYCLE_STATE = {
     B: "pending",  // human approves sprint result before DONE
   },
   artifacts: {
+    "intake.md": false,
     "requirements.md": false,
     "use-cases.md": false,
     "intent.md": false,
@@ -212,7 +214,8 @@ function main() {
   log("");
   log(`  ${cyan("Structure:")}`);
   log(`  ${dirName}/`);
-  log(`  ├── requirements.md       ← Spec Agent fills this in`);
+  log(`  ├── intake.md              ← Spec Agent fills this in FIRST (raw request + Q&A)`);
+  log(`  ├── requirements.md       ← Spec Agent fills this in (after intake confirmed)`);
   log(`  ├── use-cases.md          ← Spec Agent fills this in`);
   log(`  ├── PLAN.md               ← PM Agent fills this in`);
   log(`  ├── orchestrate.js        ← Pipeline controller`);
@@ -232,7 +235,8 @@ function main() {
   log(`  1. cd ${dirName}`);
   log(`  2. Run the Spec Agent with your project request:`);
   log(`     → Hand agent-spec.md to Claude with your idea`);
-  log(`     → It produces: requirements.md, use-cases.md, intent.md`);
+  log(`     → It first writes intake.md (raw request + Q&A + confirmed intent)`);
+  log(`     → Then produces: requirements.md, use-cases.md, intent.md`);
   log(`  3. Run the pipeline:`);
   log(`     node orchestrate.js run`);
   log(`  4. Or step by step:`);

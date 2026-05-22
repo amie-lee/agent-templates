@@ -25,10 +25,10 @@ const { execSync } = require('child_process');
 const AGENT_CONTRACTS = {
   spec: {
     requires: [],  // first agent — only needs user input (natural language, no files)
-    produces: ['requirements.md', 'use-cases.md', 'intent.md'],
+    produces: ['intake.md', 'requirements.md', 'use-cases.md', 'intent.md'],
   },
   arch: {
-    requires: ['requirements.md', 'intent.md'],
+    requires: ['intake.md', 'requirements.md', 'intent.md'],
     produces: ['architecture-decision.md'],
     beforeCheckpoint: 'A',  // CHECKPOINT A happens after arch completes
   },

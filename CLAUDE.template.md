@@ -37,7 +37,8 @@ Do not proceed past a BLOCKED state. Wait for the user to resolve the blocker, t
 spec → arch → [CHECKPOINT A: human approval] → pm → design∥backend → frontend → qa → [CHECKPOINT B: human approval] → done
 ```
 
-- **spec** and **arch** are new pre-development phases. Never skip them.
+- **spec** runs first. It produces `intake.md` before anything else. Claude must pause after intake.md is written and wait for the human to confirm their interpretation is correct before spec continues.
+- **arch** reads `intake.md` first — the verbatim human request is the most honest signal.
 - **design** and **backend** run in parallel after pm completes — dispatch both, wait for both.
 - **CHECKPOINT A** requires explicit human approval before pm can run: `node orchestrate.js checkpoint A`
 - **CHECKPOINT B** requires explicit human approval before done can run: `node orchestrate.js checkpoint B`
@@ -80,7 +81,7 @@ All ADRs use `adr/adr.template.md` as the base. Copy it, fill it in, do not modi
 
 | Agent | Must produce |
 |-------|-------------|
-| spec | requirements.md, use-cases.md, intent.md + ADRs for scope cuts / assumption resolutions |
+| spec | intake.md (FIRST — wait for human confirmation), requirements.md, use-cases.md, intent.md + ADRs |
 | arch | architecture-decision.md (ADR-001 in adr/) + ADRs for secondary tech decisions |
 | pm | PLAN.md + ADRs for sprint deferrals |
 | design | design-spec.md, design-tokens.md + ADRs for UX pattern choices |
