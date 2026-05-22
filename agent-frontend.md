@@ -81,6 +81,22 @@ Document your localStorage key in a comment at the top of the relevant hook.
 ## Handoff to Backend
 When you are done, produce `api-contract.md`. Backend agent reads this before writing any route.
 
+## Sprint Boundary Rule
+
+**You build only what is in PLAN.md for this sprint. Nothing more.**
+
+If during implementation you think of a useful component, interaction, or feature that is NOT in PLAN.md:
+1. Do NOT build it
+2. Add it to `sprint-backlog.md` under "Discovered Mid-Sprint"
+3. Continue with in-scope work
+
+**Common expansion traps to avoid:**
+- "While I'm here, I'll also add..." — no. Log it, don't build it.
+- "The design didn't specify this edge state, so I'll add a nice animation..." — implement the minimum. Log the enhancement.
+- "This API response has extra fields I could use for a better UX..." — only use what PLAN.md requires. Log the idea.
+
+If a story in PLAN.md genuinely cannot be completed without something not in the sprint plan, surface it to the Orchestrator as a Blocker — do not silently expand scope.
+
 ## Meeting Participation
 
 ### Cross-Review Meeting (read before starting work)

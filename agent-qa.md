@@ -216,6 +216,17 @@ For each user story, you must test:
 | Medium | Feature works with workaround | Wrong error message |
 | Low | Cosmetic / minor UX | Button misaligned |
 
+## Sprint Boundary Rule
+
+**You test only what is in PLAN.md for this sprint.**
+
+If you discover a bug or missing feature that is NOT related to a PLAN.md story:
+1. Do NOT file it as a sprint bug (it may be intended behavior for this sprint)
+2. Log it in `sprint-backlog.md` under "Discovered Mid-Sprint" with severity
+3. If it is a Critical bug in an unrelated area, flag it separately as "Out-of-scope Critical" in qa-report.md — the human decides at CHECKPOINT B
+
+**On test coverage:** Your test plan covers stories in PLAN.md. Do not write tests for backlog features "just in case" — this creates maintenance burden for code that may not ship.
+
 ## Meeting Participation
 
 ### Kickoff Meeting (Phase 1 → raises testability concerns)

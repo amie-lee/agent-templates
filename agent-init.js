@@ -37,6 +37,7 @@ const ROOT_TEMPLATE_FILES = [
   { src: "adr.template.md",          dest: "adr/adr.template.md" },
   { src: "meeting.template.md",      dest: "meetings/meeting.template.md" },
   { src: "intake.template.md",       dest: "intake.md" },
+  { src: "sprint-backlog.template.md", dest: "sprint-backlog.md" },
 ];
 
 const INITIAL_CYCLE_STATE = {
@@ -44,9 +45,19 @@ const INITIAL_CYCLE_STATE = {
   completed: [],
   pending: ["spec"],
   blockers: [],
+  sprint: 1,
+  sprintGoal: "",
+  sprintStoriesPlanned: 0,
+  sprintStoriesCompleted: 0,
+  sprintHistory: [],
   checkpoints: {
     A: "pending",  // human approves scope + architecture before PM runs
     B: "pending",  // human approves sprint result before DONE
+  },
+  meetings: {
+    kickoff: "pending",
+    "cross-review": "pending",
+    "sprint-review": "pending",
   },
   artifacts: {
     "intake.md": false,
@@ -55,6 +66,8 @@ const INITIAL_CYCLE_STATE = {
     "intent.md": false,
     "architecture-decision.md": false,
     "PLAN.md": false,
+    "sprint-backlog.md": false,
+    "qa-plan.md": false,
     "design-spec.md": false,
     "design-tokens.md": false,
     "api-spec.yaml": false,
@@ -221,7 +234,8 @@ function main() {
   log(`  ├── intake.md              ← Spec Agent fills this in FIRST (raw request + Q&A)`);
   log(`  ├── requirements.md       ← Spec Agent fills this in (after intake confirmed)`);
   log(`  ├── use-cases.md          ← Spec Agent fills this in`);
-  log(`  ├── PLAN.md               ← PM Agent fills this in`);
+  log(`  ├── PLAN.md               ← PM Agent: THIS sprint's scope only`);
+  log(`  ├── sprint-backlog.md     ← PM Agent + all agents: deferred work + discoveries`);
   log(`  ├── orchestrate.js        ← Pipeline controller`);
   log(`  ├── CLAUDE.md             ← Claude Code auto-pipeline rules`);
   log(`  ├── cycle-state.json      ← Phase tracking`);

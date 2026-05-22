@@ -66,6 +66,25 @@ node orchestrate.js advance frontend
 
 ---
 
+## Sprint Boundary Enforcement
+
+**Scope lock is absolute.** Once a sprint starts (after Kickoff meeting), no new stories can be added to the current sprint. This includes:
+
+- Features the user mentions mid-sprint
+- "Nice to have" additions discovered during implementation
+- Bug fixes for issues outside the sprint scope (log separately as "out-of-scope critical" if needed)
+
+When any agent encounters out-of-scope work:
+1. Log it to `sprint-backlog.md` under "Discovered Mid-Sprint"
+2. Continue with in-scope work
+3. If it blocks a PLAN.md story, surface it as a Blocker — do NOT silently implement it
+
+**Sprint transition:** When CHECKPOINT B is approved and sprint is complete, run:
+```bash
+node orchestrate.js sprint next
+```
+This archives the sprint, increments the counter, and resets sprint-level state. The next sprint starts fresh with a new PM run.
+
 ## Meetings
 
 Three mandatory meetings gate pipeline transitions. Each is a document in `meetings/` — agents write their sections independently, orchestrator resolves and closes.
@@ -102,7 +121,7 @@ All ADRs use `adr/adr.template.md` as the base. Copy it, fill it in, do not modi
 |-------|-------------|
 | spec | intake.md (FIRST — wait for human confirmation), requirements.md, use-cases.md, intent.md + ADRs |
 | arch | architecture-decision.md (ADR-001 in adr/) + ADRs for secondary tech decisions |
-| pm | PLAN.md + ADRs for sprint deferrals |
+| pm | PLAN.md, sprint-N-plan.md, sprint-backlog.md (updated) + ADRs for sprint deferrals |
 | design | design-spec.md, design-tokens.md + ADRs for UX pattern choices |
 | backend | api-spec.yaml, api-samples.sh, schema.sql + ADRs for API / data model decisions |
 | frontend | src/ (components, hooks, tests/), api-contract.md + ADRs for state / architecture choices |

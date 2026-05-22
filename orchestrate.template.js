@@ -110,7 +110,17 @@ function run(cmd) {
 function cmd_status() {
   const state = readState();
 
-  console.log(`\nPhase:     ${state.phase}`);
+  const sprintNum = state.sprint || 1;
+  const goal = state.sprintGoal || '(not set)';
+  console.log(`\n━━━ Sprint ${sprintNum} ━━━`);
+  console.log(`Goal:      ${goal}`);
+  if (state.sprintStoriesPlanned) {
+    const done = state.sprintStoriesCompleted || 0;
+    const planned = state.sprintStoriesPlanned;
+    const bar = '█'.repeat(done) + '░'.repeat(Math.max(0, planned - done));
+    console.log(`Progress:  [${bar}] ${done}/${planned} stories`);
+  }
+  console.log(`Phase:     ${state.phase}`);
   console.log(`Completed: ${state.completed.join(', ') || 'none'}`);
   console.log(`Pending:   ${state.pending.join(', ') || 'none'}`);
   if (state.blockers && state.blockers.length) {
@@ -119,8 +129,14 @@ function cmd_status() {
 
   const checkpoints = state.checkpoints || {};
   console.log('\nCheckpoints:');
-  console.log(`  ${checkpoints.A === 'approved' ? '✓' : '○'} CHECKPOINT A — Scope + Architecture approval (before PM)`);
-  console.log(`  ${checkpoints.B === 'approved' ? '✓' : '○'} CHECKPOINT B — Sprint review (before DONE)`);
+  console.log(`  ${checkpoints.A === 'approved' ? '✓' : '○'} CHECKPOINT A — Scope + Architecture approval`);
+  console.log(`  ${checkpoints.B === 'approved' ? '✓' : '○'} CHECKPOINT B — Sprint review`);
+
+  const meetings = state.meetings || {};
+  console.log('\nMeetings:');
+  console.log(`  ${meetings.kickoff === 'resolved' ? '✓' : '○'} Kickoff`);
+  console.log(`  ${meetings['cross-review'] === 'resolved' ? '✓' : '○'} Cross-review`);
+  console.log(`  ${meetings['sprint-review'] === 'resolved' ? '✓' : '○'} Sprint Review`);
 
   console.log('\nArtifacts:');
   for (const [artifact, recorded] of Object.entries(state.artifacts || {})) {
@@ -376,6 +392,120 @@ function cmd_run() {
   runNextAgent();
 }
 
+function cmd_sprint(subcommand, ...args) {
+  const state = readState();
+  const sprint = state.sprint || 1;
+
+  if (!subcommand || subcommand === 'status') {
+    const done = state.sprintStoriesCompleted || 0;
+    const planned = state.sprintStoriesPlanned || 0;
+    const deferred = state.sprintStoriesDeferred || 0;
+    console.log(`\nSprint ${sprint}`);
+    console.log(`Goal:      ${state.sprintGoal || '(not set — run PM agent)'}`);
+    console.log(`Stories:   ${done} done / ${planned} planned / ${deferred} deferred to backlog`);
+    if (planned > 0) {
+      const pct = Math.round((done / planned) * 100);
+      console.log(`Velocity:  ${pct}%`);
+    }
+
+    // Show backlog count if file exists
+    const backlogPath = path.join(process.cwd(), 'sprint-backlog.md');
+    if (fs.existsSync(backlogPath)) {
+      const content = fs.readFileSync(backlogPath, 'utf8');
+      const midSprintItems = (content.match(/\| \[DATE\]/g) || []).length;
+      console.log(`Backlog:   sprint-backlog.md exists — check for mid-sprint discoveries`);
+    }
+
+    if (state.sprintHistory && state.sprintHistory.length > 0) {
+      console.log('\nSprint History:');
+      for (const s of state.sprintHistory) {
+        console.log(`  Sprint ${s.sprint}: ${s.completed}/${s.planned} stories — "${s.goal}"`);
+      }
+    }
+    console.log('');
+    return;
+  }
+
+  if (subcommand === 'set-goal') {
+    const goal = args.join(' ');
+    if (!goal) {
+      console.error('Usage: node orchestrate.js sprint set-goal "Your sprint goal here"');
+      process.exit(1);
+    }
+    state.sprintGoal = goal;
+    writeState(state);
+    console.log(`✓ Sprint ${sprint} goal set: "${goal}"`);
+    return;
+  }
+
+  if (subcommand === 'set-capacity') {
+    const planned = parseInt(args[0]);
+    if (isNaN(planned)) {
+      console.error('Usage: node orchestrate.js sprint set-capacity <number>');
+      process.exit(1);
+    }
+    state.sprintStoriesPlanned = planned;
+    state.sprintStoriesCompleted = 0;
+    writeState(state);
+    console.log(`✓ Sprint ${sprint} capacity set: ${planned} stories`);
+    return;
+  }
+
+  if (subcommand === 'complete-story') {
+    state.sprintStoriesCompleted = (state.sprintStoriesCompleted || 0) + 1;
+    writeState(state);
+    const done = state.sprintStoriesCompleted;
+    const planned = state.sprintStoriesPlanned || '?';
+    console.log(`✓ Story marked complete. Sprint ${sprint} progress: ${done}/${planned}`);
+    return;
+  }
+
+  if (subcommand === 'next') {
+    // Archive current sprint, start next
+    const history = state.sprintHistory || [];
+    history.push({
+      sprint,
+      goal: state.sprintGoal || '',
+      planned: state.sprintStoriesPlanned || 0,
+      completed: state.sprintStoriesCompleted || 0,
+      deferred: state.sprintStoriesDeferred || 0,
+      date: new Date().toISOString().split('T')[0],
+    });
+    state.sprintHistory = history;
+    state.sprint = sprint + 1;
+    state.sprintGoal = '';
+    state.sprintStoriesPlanned = 0;
+    state.sprintStoriesCompleted = 0;
+    state.sprintStoriesDeferred = 0;
+    // Reset sprint-level state
+    state.phase = 'pm';
+    state.pending = ['pm'];
+    state.completed = state.completed.filter(a => ['spec', 'arch'].includes(a));
+    state.checkpoints = { A: 'approved', B: 'pending' };
+    state.meetings = { kickoff: 'pending', 'cross-review': 'pending', 'sprint-review': 'pending' };
+    writeState(state);
+    console.log(`✓ Sprint ${sprint} archived. Starting Sprint ${sprint + 1}.`);
+    console.log(`  Previous sprints: ${history.length} completed`);
+    console.log(`  Next: Run PM agent for Sprint ${sprint + 1} planning.`);
+    return;
+  }
+
+  if (subcommand === 'backlog') {
+    const backlogPath = path.join(process.cwd(), 'sprint-backlog.md');
+    if (!fs.existsSync(backlogPath)) {
+      console.log('\nNo sprint-backlog.md found.\n');
+      return;
+    }
+    console.log('\n' + fs.readFileSync(backlogPath, 'utf8').split('\n').slice(0, 40).join('\n'));
+    console.log('\n(truncated — open sprint-backlog.md to see full backlog)\n');
+    return;
+  }
+
+  console.error(`Unknown sprint subcommand: ${subcommand}`);
+  console.error('Usage: node orchestrate.js sprint [status|set-goal|set-capacity|complete-story|next|backlog]');
+  process.exit(1);
+}
+
 function cmd_meeting(subcommand, arg) {
   const meetingDir = path.join(process.cwd(), MEETING_DIR);
 
@@ -586,33 +716,48 @@ ${artifactList || '- (none recorded)'}
 
 const [, , command, arg, arg2] = process.argv;
 
+const restArgs = process.argv.slice(4);
+
 switch (command) {
-  case 'status':     cmd_status();                break;
-  case 'validate':   cmd_validate(arg);           break;
-  case 'advance':    cmd_advance(arg);            break;
-  case 'checkpoint': cmd_checkpoint(arg);         break;
-  case 'meeting':    cmd_meeting(arg, arg2);      break;
-  case 'adr':        cmd_adr();                   break;
-  case 'verify':     cmd_verify();                break;
-  case 'run':        cmd_run();                   break;
-  case 'done':       cmd_done();                  break;
+  case 'status':     cmd_status();                         break;
+  case 'validate':   cmd_validate(arg);                    break;
+  case 'advance':    cmd_advance(arg);                     break;
+  case 'checkpoint': cmd_checkpoint(arg);                  break;
+  case 'sprint':     cmd_sprint(arg, ...restArgs);         break;
+  case 'meeting':    cmd_meeting(arg, arg2);               break;
+  case 'adr':        cmd_adr();                            break;
+  case 'verify':     cmd_verify();                         break;
+  case 'run':        cmd_run();                            break;
+  case 'done':       cmd_done();                           break;
   default:
     console.log('Usage: node orchestrate.js <command>');
-    console.log('Commands:');
-    console.log('  status                       — show current pipeline state + checkpoints');
-    console.log('  validate <agent>             — check if agent inputs are ready');
-    console.log('  advance <agent>              — mark agent complete, move to next');
-    console.log('  checkpoint <A|B>             — record human approval at a pipeline checkpoint');
-    console.log('  meeting [status]             — list all meetings and their status');
-    console.log('  meeting start <type>         — create a new meeting file');
-    console.log('  meeting close <filename>     — resolve or escalate a meeting');
-    console.log('  adr                          — list all Architecture Decision Records');
-    console.log('  verify                       — run typecheck, build, test, lighthouse');
-    console.log('  run                          — automated pipeline');
-    console.log('  done                         — produce DONE.md');
     console.log('');
-    console.log(`Valid agents: ${Object.keys(AGENT_CONTRACTS).join(', ')}`);
+    console.log('Pipeline:');
+    console.log('  status                         — sprint progress + pipeline state');
+    console.log('  validate <agent>               — check if agent inputs are ready');
+    console.log('  advance <agent>                — mark agent complete, move to next');
+    console.log('  checkpoint <A|B>               — record human approval');
+    console.log('  verify                         — run typecheck, build, test, lighthouse');
+    console.log('  run                            — automated pipeline');
+    console.log('  done                           — produce DONE.md');
+    console.log('');
+    console.log('Sprint:');
+    console.log('  sprint status                  — show sprint goal, progress, velocity');
+    console.log('  sprint set-goal "..."          — set the sprint goal');
+    console.log('  sprint set-capacity <N>        — set planned story count');
+    console.log('  sprint complete-story          — mark one story done');
+    console.log('  sprint next                    — archive sprint, start next');
+    console.log('  sprint backlog                 — show sprint-backlog.md');
+    console.log('');
+    console.log('Meetings:');
+    console.log('  meeting [status]               — list all meetings');
+    console.log('  meeting start <type>           — create meeting file');
+    console.log('  meeting close <filename>       — resolve or escalate');
+    console.log('');
+    console.log('Records:');
+    console.log('  adr                            — list Architecture Decision Records');
+    console.log('');
+    console.log(`Agents: ${Object.keys(AGENT_CONTRACTS).join(', ')}`);
     console.log(`Meeting types: ${Object.keys(MEETING_TYPES).join(', ')}`);
-    console.log('Checkpoints: A (scope + architecture), B (sprint review)');
     process.exit(1);
 }

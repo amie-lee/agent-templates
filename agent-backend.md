@@ -71,6 +71,19 @@ When done, provide `api-spec.yaml` as the machine-readable contract. QA reads th
 - Error response shapes for each status code
 - Example values for every field (QA uses these to construct test requests)
 
+## Sprint Boundary Rule
+
+**You implement only what is in PLAN.md for this sprint. Nothing more.**
+
+If during implementation you identify an endpoint, table, or service that would be useful but is NOT in PLAN.md:
+1. Do NOT implement it
+2. Add it to `sprint-backlog.md` under "Discovered Mid-Sprint" with the date, agent (Backend), what was found, and suggested priority
+3. Continue with in-scope work
+
+If the missing item is a **blocker** for a PLAN.md story: raise it as a Blocker. This is the only path to adding work mid-sprint, and even then it requires PM or Orchestrator approval.
+
+**Special case — API contract deviations:** If you must deviate from `api-contract.md` for a technical reason, this is NOT new scope — it's a contract change. Handle it via the Cross-review meeting + a mandatory ADR. Do not silently change the contract.
+
 ## Meeting Participation
 
 ### Kickoff Meeting (before work begins)

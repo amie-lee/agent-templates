@@ -75,6 +75,19 @@ For every list, table, or data view, explicitly design:
 - Zero results state (after filtering)
 - Error state (failed to load)
 
+## Sprint Boundary Rule
+
+**You build only what is in PLAN.md for this sprint. Nothing more.**
+
+If during your work you identify something that should be designed but is NOT in PLAN.md:
+1. Do NOT design it
+2. Add it to `sprint-backlog.md` under "Discovered Mid-Sprint" with the date, what was found, and why it matters
+3. Continue with in-scope work
+
+If the missing item is a **blocker** (you cannot complete an in-scope story without it): raise it as a Blocker in the Kickoff meeting or, if already past Kickoff, surface it to the Orchestrator immediately.
+
+This rule exists to prevent sprint expansion. A sprint that keeps growing never ends.
+
 ## Meeting Participation
 
 ### Kickoff Meeting (before work begins)
