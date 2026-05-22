@@ -392,6 +392,208 @@ function cmd_run() {
   runNextAgent();
 }
 
+function cmd_report() {
+  const state = readState();
+  const date = new Date().toISOString().split('T')[0];
+  const projectName = state.projectName || 'Project';
+  const sprint = state.sprint || 1;
+  const lines = [];
+
+  const hr = '━'.repeat(52);
+  lines.push('');
+  lines.push(hr);
+  lines.push(`  PROJECT STATUS REPORT — ${projectName}`);
+  lines.push(`  Generated: ${date}   Sprint: ${sprint}`);
+  lines.push(hr);
+
+  // ── Sprint state ──────────────────────────────────────
+  lines.push('');
+  lines.push('SPRINT');
+  const goal = state.sprintGoal;
+  if (goal) {
+    lines.push(`  Goal: "${goal}"`);
+  } else {
+    lines.push('  Goal: (not set — PM agent has not run for this sprint)');
+  }
+  const planned = state.sprintStoriesPlanned || 0;
+  const done = state.sprintStoriesCompleted || 0;
+  if (planned > 0) {
+    const pct = Math.round((done / planned) * 100);
+    const filled = Math.round((done / planned) * 20);
+    const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
+    lines.push(`  Progress: [${bar}] ${done}/${planned} stories (${pct}%)`);
+  } else {
+    lines.push('  Progress: No stories planned yet');
+  }
+
+  // ── What's done ───────────────────────────────────────
+  lines.push('');
+  lines.push('WHAT\'S DONE');
+  const artifacts = state.artifacts || {};
+  const agentLabels = {
+    'intake.md':              'Requirements intake captured (intake.md)',
+    'requirements.md':        'Requirements written (requirements.md)',
+    'use-cases.md':           'Use cases defined (use-cases.md)',
+    'intent.md':              'Project intent documented (intent.md)',
+    'architecture-decision.md': 'Architecture decided (ADR-001)',
+    'PLAN.md':                `Sprint ${sprint} scope planned (PLAN.md)`,
+    'sprint-backlog.md':      'Product backlog initialized (sprint-backlog.md)',
+    'qa-plan.md':             'QA test plan written (qa-plan.md)',
+    'design-spec.md':         'UI design complete (design-spec.md)',
+    'api-spec.yaml':          'API designed (api-spec.yaml)',
+    'api-contract.md':        'API contract confirmed (api-contract.md)',
+    'verify-report.json':     'Build + tests verified (verify-report.json)',
+    'qa-report.md':           'QA report complete (qa-report.md)',
+  };
+  let anyDone = false;
+  for (const [file, label] of Object.entries(agentLabels)) {
+    if (fileExists(file)) {
+      lines.push(`  ✓ ${label}`);
+      anyDone = true;
+    }
+  }
+  if (!anyDone) lines.push('  (nothing completed yet)');
+
+  // Meetings
+  const meetings = state.meetings || {};
+  if (meetings.kickoff === 'resolved')       lines.push('  ✓ Kickoff meeting held');
+  if (meetings['cross-review'] === 'resolved') lines.push('  ✓ Cross-review meeting held — Design & Backend aligned');
+  if (meetings['sprint-review'] === 'resolved') lines.push('  ✓ Sprint review meeting held');
+
+  // Checkpoints
+  const checkpoints = state.checkpoints || {};
+  if (checkpoints.A === 'approved') lines.push('  ✓ CHECKPOINT A passed — scope & architecture approved');
+  if (checkpoints.B === 'approved') lines.push('  ✓ CHECKPOINT B passed — sprint result approved');
+
+  // ── What's in progress ───────────────────────────────
+  lines.push('');
+  lines.push('IN PROGRESS');
+  const pending = state.pending || [];
+  if (pending.length > 0) {
+    const agentNames = {
+      spec: 'Spec Agent — capturing requirements',
+      arch: 'Architecture Agent — deciding system design',
+      pm:   'PM Agent — planning sprint scope',
+      design: 'Design Agent — creating UI specifications',
+      backend: 'Backend Agent — building API & database',
+      'qa-planning': 'QA Agent — writing test plan',
+      frontend: 'Frontend Agent — building UI',
+      'qa-run': 'QA Agent — running tests against the app',
+    };
+    for (const a of pending) {
+      lines.push(`  → ${agentNames[a] || a}`);
+    }
+  } else if (state.phase === 'done') {
+    lines.push('  Sprint complete.');
+  } else {
+    lines.push('  (pipeline not yet started)');
+  }
+
+  // ── Meetings pending ──────────────────────────────────
+  const meetingsPending = [];
+  if (meetings.kickoff !== 'resolved' && state.completed.includes('pm')) {
+    meetingsPending.push('Kickoff meeting — run: node orchestrate.js meeting start kickoff');
+  }
+  if (meetings['cross-review'] !== 'resolved' && state.completed.includes('backend') && state.completed.includes('design')) {
+    meetingsPending.push('Cross-review meeting — run: node orchestrate.js meeting start cross-review');
+  }
+  if (meetings['sprint-review'] !== 'resolved' && state.completed.includes('qa-run')) {
+    meetingsPending.push('Sprint review meeting — run: node orchestrate.js meeting start sprint-review');
+  }
+  if (meetingsPending.length > 0) {
+    lines.push('');
+    lines.push('MEETINGS NEEDED');
+    for (const m of meetingsPending) lines.push(`  ⚑ ${m}`);
+  }
+
+  // ── ADRs ──────────────────────────────────────────────
+  const adrDir = path.join(process.cwd(), 'adr');
+  if (fs.existsSync(adrDir)) {
+    const adrFiles = fs.readdirSync(adrDir).filter(f => f.endsWith('.md') && f !== 'ADR-000-index.md');
+    if (adrFiles.length > 0) {
+      lines.push('');
+      lines.push(`DECISIONS RECORDED (${adrFiles.length} ADRs)`);
+      for (const f of adrFiles.sort()) {
+        const content = fs.readFileSync(path.join(adrDir, f), 'utf8');
+        const titleLine = content.split('\n').find(l => l.startsWith('# ADR-'));
+        const authorLine = content.split('\n').find(l => l.includes('**Author:**'));
+        const title = titleLine ? titleLine.replace(/^#\s*/, '') : f;
+        const author = authorLine ? authorLine.replace(/.*\*\*Author:\*\*\s*/, '').trim() : '';
+        lines.push(`  · ${title}${author ? ' — ' + author : ''}`);
+      }
+    }
+  }
+
+  // ── Backlog ───────────────────────────────────────────
+  const backlogPath = path.join(process.cwd(), 'sprint-backlog.md');
+  if (fs.existsSync(backlogPath)) {
+    const backlogContent = fs.readFileSync(backlogPath, 'utf8');
+    const midSprintCount = (backlogContent.match(/\| \d{4}-\d{2}-\d{2}/g) || []).length;
+    lines.push('');
+    lines.push('BACKLOG');
+    lines.push('  sprint-backlog.md exists — open to see deferred items and discoveries');
+    if (midSprintCount > 0) {
+      lines.push(`  ⚑ ${midSprintCount} item(s) discovered mid-sprint — review at Sprint Review meeting`);
+    }
+  }
+
+  // ── Blockers ──────────────────────────────────────────
+  const blockers = state.blockers || [];
+  lines.push('');
+  lines.push('BLOCKERS');
+  if (blockers.length > 0) {
+    for (const b of blockers) lines.push(`  ⚠ ${b}`);
+  } else {
+    lines.push('  None');
+  }
+
+  // ── Next human action ─────────────────────────────────
+  lines.push('');
+  lines.push('NEXT ACTION FOR YOU');
+  if (checkpoints.A !== 'approved' && (fileExists('architecture-decision.md'))) {
+    lines.push('  Review requirements.md and architecture-decision.md, then run:');
+    lines.push('  → node orchestrate.js checkpoint A');
+  } else if (checkpoints.B !== 'approved' && fileExists('qa-report.md')) {
+    lines.push('  Review qa-report.md and sprint-review meeting, then run:');
+    lines.push('  → node orchestrate.js checkpoint B');
+  } else if (meetingsPending.length > 0) {
+    lines.push(`  → ${meetingsPending[0]}`);
+  } else if (pending.length > 0) {
+    const nextAgent = pending[0];
+    lines.push(`  Wait for ${nextAgent} agent to complete, then run:`);
+    lines.push(`  → node orchestrate.js advance ${nextAgent}`);
+  } else if (state.phase === 'done') {
+    lines.push('  Sprint is complete. Ready to ship or start next sprint:');
+    lines.push('  → node orchestrate.js sprint next   (start Sprint ' + (sprint + 1) + ')');
+    lines.push('  → node orchestrate.js done          (produce DONE.md)');
+  } else {
+    lines.push('  Check status: node orchestrate.js status');
+  }
+
+  // ── Sprint history ────────────────────────────────────
+  const history = state.sprintHistory || [];
+  if (history.length > 0) {
+    lines.push('');
+    lines.push('SPRINT HISTORY');
+    for (const s of history) {
+      const vel = s.planned > 0 ? `${Math.round((s.completed / s.planned) * 100)}% velocity` : '';
+      lines.push(`  Sprint ${s.sprint} (${s.date}): ${s.completed}/${s.planned} stories — ${vel}`);
+    }
+  }
+
+  lines.push('');
+  lines.push(hr);
+  lines.push('');
+
+  const output = lines.join('\n');
+  console.log(output);
+
+  // Optionally write to REPORT.md
+  const reportPath = path.join(process.cwd(), 'REPORT.md');
+  fs.writeFileSync(reportPath, output.replace(/\x1b\[[0-9;]*m/g, ''));
+  console.log('Report also saved to REPORT.md\n');
+}
+
 function cmd_sprint(subcommand, ...args) {
   const state = readState();
   const sprint = state.sprint || 1;
@@ -720,6 +922,7 @@ const restArgs = process.argv.slice(4);
 
 switch (command) {
   case 'status':     cmd_status();                         break;
+  case 'report':     cmd_report();                         break;
   case 'validate':   cmd_validate(arg);                    break;
   case 'advance':    cmd_advance(arg);                     break;
   case 'checkpoint': cmd_checkpoint(arg);                  break;
@@ -733,7 +936,8 @@ switch (command) {
     console.log('Usage: node orchestrate.js <command>');
     console.log('');
     console.log('Pipeline:');
-    console.log('  status                         — sprint progress + pipeline state');
+    console.log('  status                         — technical pipeline state');
+    console.log('  report                         — human-readable project status report');
     console.log('  validate <agent>               — check if agent inputs are ready');
     console.log('  advance <agent>                — mark agent complete, move to next');
     console.log('  checkpoint <A|B>               — record human approval');
