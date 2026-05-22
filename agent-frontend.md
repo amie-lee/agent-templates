@@ -81,6 +81,29 @@ Document your localStorage key in a comment at the top of the relevant hook.
 ## Handoff to Backend
 When you are done, produce `api-contract.md`. Backend agent reads this before writing any route.
 
+## Decision Log
+
+Frontend decisions often look like implementation details but affect long-term maintainability, performance, and the ability to add features later. Document the ones that future engineers would otherwise have to reverse-engineer.
+
+### ADR triggers for the Frontend Agent
+
+Write an ADR when:
+
+| Situation | Example |
+|-----------|---------|
+| You choose a **state management approach** | Local state vs Context API vs Zustand — and why |
+| You establish a **component architecture pattern** | Compound components, render props, or slot-based layout |
+| You make a **performance trade-off** | Lazy-loading a heavy component that causes a layout shift |
+| You **work around a Backend API limitation** | Caching a response client-side because no server-side cache exists |
+| You **deviate from the design spec** in any way | Simplifying a complex animation because it's not feasible in timeline |
+| You choose a **data fetching strategy** | SWR vs React Query vs plain useEffect + fetch |
+
+### Title pattern
+`ADR-NNN-frontend-[topic].md` — e.g., `ADR-007-frontend-state-management.md`
+
+### Rule: Design deviations are mandatory ADRs
+If you implement something differently from `design-spec.md`, you MUST write an ADR explaining the deviation and its impact. The Design Agent's sign-off may be needed.
+
 ## References
 - React docs: https://react.dev
 - WAI-ARIA practices: https://www.w3.org/WAI/ARIA/apg/

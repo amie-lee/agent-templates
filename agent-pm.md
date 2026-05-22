@@ -65,6 +65,28 @@ As a [user type], I want [action] so that [outcome].
 - "What would break if we skipped this?"
 - "Which agent owns this piece?"
 
+## Decision Log
+
+Write an ADR when your planning decisions go beyond the obvious. Users and future agents should be able to read the ADR index and understand *why* the sprint was shaped this way.
+
+### ADR triggers for the PM Agent
+
+Write an ADR when:
+
+| Situation | Example |
+|-----------|---------|
+| You **defer a Must-have requirement** to a later sprint | An FR-001 "Must" can't fit in Sprint 1 due to dependency ordering |
+| The **milestone sequence** is non-obvious | Backend is scheduled before Design despite both being available |
+| You **split a use case** across multiple sprints | UC-003 is too large; first half in Sprint 1, rest deferred |
+| You **reduce scope** from what requirements.md specifies | A "Should" requirement is dropped after capacity analysis |
+
+### Title pattern
+`ADR-NNN-planning-[topic].md` — e.g., `ADR-004-planning-auth-deferred.md`
+
+### What does NOT need an ADR
+- Sprint assignments that follow directly from dependencies (e.g., backend before frontend is obvious)
+- Milestone naming decisions
+
 ## References
 - Shape Up (Basecamp): https://basecamp.com/shapeup — concept of "appetite" for scoping
 - INVEST criteria for user stories: https://www.agilealliance.org/glossary/invest/

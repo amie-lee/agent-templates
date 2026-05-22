@@ -34,6 +34,7 @@ const ROOT_TEMPLATE_FILES = [
   { src: "CLAUDE.template.md",      dest: "CLAUDE.md" },
   { src: "requirements.template.md", dest: "requirements.md" },
   { src: "use-cases.template.md",    dest: "use-cases.md" },
+  { src: "adr.template.md",          dest: "adr/adr.template.md" },
 ];
 
 const INITIAL_CYCLE_STATE = {
@@ -177,8 +178,31 @@ function main() {
   fs.writeFileSync(path.join(projectDir, ".gitignore"), gitignore);
   log(green(`✓`) + ` Created .gitignore`);
 
-  // Write ADR index placeholder
-  const adrIndex = `# ADR Index — ${projectName}\n> Architecture Decision Records. Each significant decision gets its own file.\n> Format: ADR-NNN-short-title.md\n\n| ID | Title | Status | Date |\n|----|-------|--------|------|\n| ADR-001 | Architecture Decision | pending | — |\n`;
+  // Write ADR index
+  const adrIndex = [
+    `# ADR Index — ${projectName}`,
+    `> Architecture Decision Records accumulate here throughout the development cycle.`,
+    `> Every agent writes ADRs for significant decisions. Run \`node orchestrate.js adr\` to list them.`,
+    `>`,
+    `> **Format:** \`ADR-NNN-[agent]-[topic].md\` — copy \`adr.template.md\` to start a new one.`,
+    `> **Rule:** Update this table every time you add a new ADR file.`,
+    ``,
+    `| ID | Title | Author | Status | Date |`,
+    `|----|-------|--------|--------|------|`,
+    `| ADR-001 | Architecture Decision | Architecture Agent | pending | — |`,
+    ``,
+    `## Decision Categories`,
+    ``,
+    `| Category | Who writes it | Example topics |`,
+    `|----------|--------------|----------------|`,
+    `| Scope | Spec Agent | Out-of-scope cuts, assumption resolutions, priority changes |`,
+    `| Architecture | Architecture Agent | System style, tech stack, integration patterns |`,
+    `| Planning | PM Agent | Sprint deferrals, milestone ordering |`,
+    `| Design | Design Agent | UX patterns, accessibility trade-offs, design deviations |`,
+    `| Backend | Backend Agent | API design, data model, security, contract deviations |`,
+    `| Frontend | Frontend Agent | State management, component patterns, design deviations |`,
+    `| QA | QA Agent | Coverage exclusions, accepted bugs, waived contract violations |`,
+  ].join("\n");
   fs.writeFileSync(path.join(adrDir, "ADR-000-index.md"), adrIndex);
   log(green(`✓`) + ` Created adr/ADR-000-index.md`);
 

@@ -71,6 +71,29 @@ When done, provide `api-spec.yaml` as the machine-readable contract. QA reads th
 - Error response shapes for each status code
 - Example values for every field (QA uses these to construct test requests)
 
+## Decision Log
+
+Backend decisions have the highest downstream impact — they constrain the API contract, database schema, and QA test targets. Document decisions that would be hard to reverse or would surprise a future engineer reading the code.
+
+### ADR triggers for the Backend Agent
+
+Write an ADR when:
+
+| Situation | Example |
+|-----------|---------|
+| You make an **API design choice** with real alternatives | Choosing resource-based URLs over action-based (`/todos` vs `/createTodo`) |
+| You make a **data model decision** that involves a trade-off | Denormalizing a table for read performance |
+| You choose an **auth or security approach** not specified in the architecture | Session tokens vs stateless JWT for a specific endpoint |
+| You **deviate from the API contract** (`api-contract.md`) in any way | Changing a field type from string to integer |
+| You add a **breaking constraint** to the schema | Making a column non-nullable that Frontend assumed was optional |
+| You make a **performance trade-off** | Skipping an index for simplicity, accepting slower queries |
+
+### Title pattern
+`ADR-NNN-backend-[topic].md` — e.g., `ADR-006-backend-soft-delete-strategy.md`
+
+### Rule: Deviations from the API contract are mandatory ADRs
+If you change anything from what `api-contract.md` specified — field names, types, status codes — you MUST write an ADR and notify the orchestrator before the Frontend Agent starts.
+
 ## References
 - OWASP Top 10: https://owasp.org/www-project-top-ten/
 - REST API design guide (Google): https://google.aip.dev/general

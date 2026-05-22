@@ -363,6 +363,62 @@ function cmd_run() {
   runNextAgent();
 }
 
+function cmd_adr() {
+  const adrDir = path.join(process.cwd(), 'adr');
+
+  if (!fs.existsSync(adrDir)) {
+    console.log('\nadr/ directory not found. No decisions recorded yet.\n');
+    return;
+  }
+
+  const files = fs.readdirSync(adrDir)
+    .filter(f => f.endsWith('.md') && f !== 'ADR-000-index.md')
+    .sort();
+
+  if (files.length === 0) {
+    console.log('\nNo ADRs written yet (adr/ only has the index).\n');
+    return;
+  }
+
+  console.log(`\nArchitecture Decision Records (${files.length} total)\n`);
+
+  for (const file of files) {
+    const content = fs.readFileSync(path.join(adrDir, file), 'utf8');
+    const lines = content.split('\n');
+
+    // Extract title (first # heading)
+    const titleLine = lines.find(l => l.startsWith('# ADR-'));
+    const title = titleLine ? titleLine.replace(/^#\s*/, '') : file;
+
+    // Extract author
+    const authorLine = lines.find(l => l.includes('**Author:**'));
+    const author = authorLine
+      ? authorLine.replace(/.*\*\*Author:\*\*\s*/, '').trim()
+      : '—';
+
+    // Extract status
+    const statusLine = lines.find(l => l.includes('**Status:**'));
+    const status = statusLine
+      ? statusLine.replace(/.*\*\*Status:\*\*\s*/, '').trim()
+      : '—';
+
+    // Extract date
+    const dateLine = lines.find(l => l.includes('**Date:**'));
+    const date = dateLine
+      ? dateLine.replace(/.*\*\*Date:\*\*\s*/, '').trim()
+      : '—';
+
+    const statusIcon = status.includes('DECIDED') ? '✓'
+      : status.includes('SUPERSEDED') ? '↩'
+      : status.includes('DEPRECATED') ? '✗'
+      : '○';
+
+    console.log(`  ${statusIcon} ${title}`);
+    console.log(`    Author: ${author}   Date: ${date}   File: adr/${file}`);
+    console.log('');
+  }
+}
+
 function cmd_done() {
   const state = readState();
   const date = new Date().toISOString().split('T')[0];
@@ -408,6 +464,7 @@ switch (command) {
   case 'validate':   cmd_validate(arg);      break;
   case 'advance':    cmd_advance(arg);       break;
   case 'checkpoint': cmd_checkpoint(arg);    break;
+  case 'adr':        cmd_adr();              break;
   case 'verify':     cmd_verify();           break;
   case 'run':        cmd_run();              break;
   case 'done':       cmd_done();             break;
@@ -418,6 +475,7 @@ switch (command) {
     console.log('  validate <agent>    — check if agent inputs are ready');
     console.log('  advance <agent>     — mark agent complete, move to next');
     console.log('  checkpoint <A|B>    — record human approval at a pipeline checkpoint');
+    console.log('  adr                 — list all Architecture Decision Records');
     console.log('  verify              — run typecheck, build, test, lighthouse');
     console.log('  run                 — automated pipeline (polls for each advance)');
     console.log('  done                — produce DONE.md');

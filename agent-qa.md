@@ -116,6 +116,28 @@ For each user story, you must test:
 | Medium | Feature works with workaround | Wrong error message |
 | Low | Cosmetic / minor UX | Button misaligned |
 
+## Decision Log
+
+QA decisions about what to test — and especially what NOT to test — are often invisible until something breaks in production. Make the test strategy explicit.
+
+### ADR triggers for the QA Agent
+
+Write an ADR when:
+
+| Situation | Example |
+|-----------|---------|
+| You **exclude a use case from E2E testing** | UC-003 is deferred because the feature is behind a feature flag |
+| You **change the test coverage boundary** | Deciding to skip network error simulation because the env doesn't support it |
+| You identify a **bug that is accepted as known behavior** | A race condition that the team accepts as low-risk for this sprint |
+| You **choose a test strategy** that has alternatives | Testing at integration level instead of unit level for a complex flow |
+| A **contract violation is waived** | Backend returns `null` instead of `[]` for empty lists; frontend handles it, noted as tech debt |
+
+### Title pattern
+`ADR-NNN-qa-[topic].md` — e.g., `ADR-008-qa-e2e-coverage-exclusions.md`
+
+### Rule: Waived contract violations must be ADRs
+If you find a mismatch between `api-spec.yaml` and the actual backend, and the decision is to accept it rather than fix it, that acceptance must be recorded as an ADR with the tech debt consequence noted explicitly.
+
 ## References
 - ISTQB testing principles: https://www.istqb.org/certifications/certified-tester-foundation-level
 - Google Testing Blog: https://testing.googleblog.com/

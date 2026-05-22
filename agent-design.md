@@ -75,6 +75,30 @@ For every list, table, or data view, explicitly design:
 - Zero results state (after filtering)
 - Error state (failed to load)
 
+## Decision Log
+
+Design decisions that affect what engineers build must be recorded. A decision that exists only in the designer's head — or only as a visual in a mockup — will be misimplemented.
+
+### ADR triggers for the Design Agent
+
+Write an ADR when:
+
+| Situation | Example |
+|-----------|---------|
+| You choose a **component pattern** with meaningful alternatives | Tabs vs accordion for a content section |
+| You make a **UX trade-off** against user expectations | Simplified flow that removes a feature users might expect |
+| You deviate from a **standard or convention** for a specific reason | Breaking mobile-first for a data-heavy table view |
+| An **accessibility approach** requires non-standard implementation | Custom focus management for a modal flow |
+| You establish a **design token decision** that constrains engineering | Choosing a specific color scale that limits future palette expansion |
+
+### Title pattern
+`ADR-NNN-design-[topic].md` — e.g., `ADR-005-design-navigation-pattern.md`
+
+### What does NOT need an ADR
+- Standard WCAG-compliant choices (those are rules, not decisions)
+- Individual component states (loading, error, empty) — these are required, not decisions
+- Hex values and spacing numbers — those live in `design-tokens.md`
+
 ## References
 - Nielsen Norman Group: https://www.nngroup.com/articles/
 - WCAG 2.1 quick reference: https://www.w3.org/WAI/WCAG21/quickref/

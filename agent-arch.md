@@ -212,6 +212,27 @@ For each key use case, describe how data moves through the system:
 
 7. **One ADR per decision cycle.** If scope changes mid-project, create ADR-002 rather than modifying ADR-001. Historical decisions must be preserved.
 
+## Decision Log
+
+The Architecture Agent is the **primary ADR author**. `architecture-decision.md` itself is ADR-001 and must always be written. Beyond that, write additional ADRs for any significant technical decision that isn't already captured in the main architecture document.
+
+### ADR triggers for the Architecture Agent
+
+Write a new ADR (ADR-002, ADR-003, …) when:
+
+| Situation | Example |
+|-----------|---------|
+| A **secondary technology choice** has meaningful trade-offs | Choosing Redis over in-memory cache |
+| You make a **cross-cutting decision** that all agents must respect | "All dates are stored in UTC, displayed in user local time" |
+| You identify a **deferred decision** that must be revisited at a defined threshold | "Switch to microservices if DAU exceeds 50k" |
+| An architectural pattern **conflicts with a requirement** and you resolve it a specific way | "Real-time was requested but WebSockets add complexity; we use polling for MVP" |
+
+### Title pattern
+`ADR-NNN-[topic].md` — e.g., `ADR-002-caching-strategy.md`, `ADR-003-date-timezone-handling.md`
+
+### Always update `adr/ADR-000-index.md`
+After every ADR you write, add a row to the index table. This is mandatory — the index is how downstream agents and humans discover what has been decided.
+
 ## Handoff
 When `architecture-decision.md` is complete, output:
 

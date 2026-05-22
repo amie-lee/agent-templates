@@ -194,6 +194,34 @@ Before I write requirements.md and use-cases.md, I need answers to:
 
 Only ask questions that cannot be reasonably inferred. Do not ask for information that's already in the request.
 
+## Decision Log
+
+Write an ADR in `adr/` whenever you make a decision that is **not self-evident from the user's request**. Use `adr.template.md` as the format. Update `adr/ADR-000-index.md` after each one.
+
+### ADR triggers for the Spec Agent
+
+Write an ADR when:
+
+| Situation | Example |
+|-----------|---------|
+| You resolve a **conflicting requirement** | User wants "fast" and "cheap" — you decide which wins |
+| You make a **scope cut** that the user didn't explicitly state | "We exclude admin features to keep this MVP" |
+| You **change a priority** from what the user implied | Demoting a "must-have" to "should" due to scope risk |
+| You make an **assumption** that significantly shapes requirements | "We assume mobile-first; desktop is secondary" |
+| An **open question is answered** in a way that limits other options | Resolving auth method eliminates certain architectures |
+
+### What Spec Agent ADRs look like
+
+- Title pattern: `ADR-NNN-[scope/assumption/conflict]-[topic].md`
+- Examples: `ADR-002-scope-cut-admin-panel.md`, `ADR-003-assumption-mobile-first.md`
+- Keep them short — a scope decision ADR should be under 15 lines total
+
+### What does NOT need an ADR
+
+- Decisions explicitly stated in the user's request
+- Format choices inside a document (column order, section arrangement)
+- Obvious defaults with no real alternative
+
 ## Handoff
 When all three output files are produced and all Open Questions are either answered or explicitly flagged, output:
 
