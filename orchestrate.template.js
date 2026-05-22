@@ -51,15 +51,28 @@ const AGENT_CONTRACTS = {
     requires: ['PLAN.md', 'design-spec.md', 'api-spec.yaml'],
     produces: ['verify-report.json', 'src/tests/'],
   },
-  qa: {
-    requires: ['PLAN.md', 'api-spec.yaml', 'verify-report.json'],
+  'qa-planning': {
+    requires: ['PLAN.md', 'requirements.md'],
+    produces: ['qa-plan.md', 'e2e/stories.spec.ts'],
+    parallel: ['design', 'backend'],  // runs simultaneously with design and backend
+  },
+  'qa-run': {
+    requires: ['PLAN.md', 'qa-plan.md', 'api-spec.yaml', 'verify-report.json'],
     produces: ['qa-report.md'],
-    beforeCheckpoint: 'B',  // CHECKPOINT B happens after qa completes
+    beforeCheckpoint: 'B',  // CHECKPOINT B happens after qa-run completes
   },
 };
 
-// Linear pipeline for sequential dispatch (design/backend parallelism handled separately)
-const AGENT_PIPELINE = ['spec', 'arch', 'pm', 'design', 'backend', 'frontend', 'qa'];
+// Meeting state helpers
+const MEETING_DIR = 'meetings';
+const MEETING_TYPES = {
+  kickoff: { trigger: 'PLAN.md completed', attendees: ['spec', 'arch', 'pm', 'design', 'backend', 'qa-planning'] },
+  'cross-review': { trigger: 'Design + Backend completed', attendees: ['design', 'backend', 'frontend'] },
+  'sprint-review': { trigger: 'QA Run completed', attendees: ['design', 'backend', 'frontend', 'qa-run'] },
+};
+
+// Linear pipeline for sequential dispatch (parallel steps handled separately)
+const AGENT_PIPELINE = ['spec', 'arch', 'pm', 'design', 'backend', 'qa-planning', 'frontend', 'qa-run'];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -363,6 +376,120 @@ function cmd_run() {
   runNextAgent();
 }
 
+function cmd_meeting(subcommand, arg) {
+  const meetingDir = path.join(process.cwd(), MEETING_DIR);
+
+  if (!subcommand || subcommand === 'status') {
+    // List all meetings and their status
+    if (!fs.existsSync(meetingDir)) {
+      console.log('\nNo meetings directory found — no meetings have been run yet.\n');
+      return;
+    }
+    const files = fs.readdirSync(meetingDir).filter(f => f.endsWith('.md')).sort();
+    if (files.length === 0) {
+      console.log('\nNo meetings recorded yet.\n');
+      return;
+    }
+    console.log(`\nMeetings (${files.length} total)\n`);
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(meetingDir, file), 'utf8');
+      const titleLine = content.split('\n').find(l => l.startsWith('# Meeting:'));
+      const statusLine = content.split('\n').find(l => l.includes('**Status:**'));
+      const title = titleLine ? titleLine.replace('# Meeting: ', '') : file;
+      const status = statusLine ? statusLine.replace(/.*\*\*Status:\*\*\s*/, '').split('→').pop().trim() : '—';
+      const icon = status.includes('RESOLVED') ? '✓' : status.includes('ESCALATED') ? '⚠' : '○';
+      console.log(`  ${icon} ${title}`);
+      console.log(`    Status: ${status}   File: meetings/${file}`);
+      console.log('');
+    }
+    return;
+  }
+
+  if (subcommand === 'start') {
+    // Create a new meeting file from the template
+    const type = arg;
+    if (!type || !MEETING_TYPES[type]) {
+      console.error(`Usage: node orchestrate.js meeting start <type>`);
+      console.error(`Types: ${Object.keys(MEETING_TYPES).join(', ')}`);
+      process.exit(1);
+    }
+    if (!fs.existsSync(meetingDir)) {
+      fs.mkdirSync(meetingDir, { recursive: true });
+    }
+    const state = readState();
+    const sprint = state.sprint || 1;
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `sprint-${String(sprint).padStart(2, '0')}-${type}.md`;
+    const filepath = path.join(meetingDir, filename);
+
+    if (fs.existsSync(filepath)) {
+      console.log(`Meeting file already exists: meetings/${filename}`);
+      console.log(`Edit it directly to add agent responses.`);
+      process.exit(0);
+    }
+
+    const templatePath = path.join(process.cwd(), 'meeting.template.md');
+    let content;
+    if (fs.existsSync(templatePath)) {
+      content = fs.readFileSync(templatePath, 'utf8')
+        .replace('[Type]', type.toUpperCase())
+        .replace('Sprint [N]', `Sprint ${sprint}`)
+        .replace('[Date]', date)
+        .replace('KICKOFF | CROSS-REVIEW | SPRINT-REVIEW', type.toUpperCase())
+        .replace('[What event caused this meeting — e.g., "PLAN.md completed"]', MEETING_TYPES[type].trigger);
+    } else {
+      content = `# Meeting: ${type.toUpperCase()} — Sprint ${sprint} — ${date}\n> Status: OPEN\n\n(meeting.template.md not found — fill in manually)\n`;
+    }
+
+    fs.writeFileSync(filepath, content);
+    console.log(`✓ Meeting created: meetings/${filename}`);
+    console.log(`  Attendees: ${MEETING_TYPES[type].attendees.join(', ')}`);
+    console.log(`  Next: dispatch each agent to write their section, then run:`);
+    console.log(`    node orchestrate.js meeting close ${filename}`);
+    return;
+  }
+
+  if (subcommand === 'close') {
+    const filename = arg;
+    if (!filename) {
+      console.error('Usage: node orchestrate.js meeting close <filename>');
+      process.exit(1);
+    }
+    const filepath = path.join(meetingDir, filename);
+    if (!fs.existsSync(filepath)) {
+      console.error(`Meeting file not found: meetings/${filename}`);
+      process.exit(1);
+    }
+    let content = fs.readFileSync(filepath, 'utf8');
+
+    // Check for unresolved blockers (simple heuristic: look for ESCALATED in Unresolved section)
+    const hasEscalation = content.includes('ESCALATED') && !content.includes('Status: RESOLVED');
+    const newStatus = hasEscalation ? 'ESCALATED' : 'RESOLVED';
+
+    // Update status line
+    content = content.replace(
+      /\*\*Status:\*\* OPEN.*|> \*\*Status:\*\* OPEN.*/,
+      `> **Status:** ${newStatus}`
+    );
+
+    fs.writeFileSync(filepath, content);
+    console.log(`✓ Meeting closed: meetings/${filename} — Status: ${newStatus}`);
+    if (newStatus === 'ESCALATED') {
+      console.log(`  ⚠ Meeting has unresolved items. Pipeline is paused.`);
+      console.log(`  → Human must resolve the escalated items, update the meeting file,`);
+      console.log(`    then re-run: node orchestrate.js meeting close ${filename}`);
+    } else {
+      console.log(`  Pipeline may now advance.`);
+    }
+    return;
+  }
+
+  console.error(`Unknown meeting subcommand: ${subcommand}`);
+  console.error('Usage: node orchestrate.js meeting [status|start <type>|close <filename>]');
+  console.error(`Meeting types: ${Object.keys(MEETING_TYPES).join(', ')}`);
+  process.exit(1);
+}
+
 function cmd_adr() {
   const adrDir = path.join(process.cwd(), 'adr');
 
@@ -457,30 +584,35 @@ ${artifactList || '- (none recorded)'}
 
 // ─── Main dispatcher ──────────────────────────────────────────────────────────
 
-const [, , command, arg] = process.argv;
+const [, , command, arg, arg2] = process.argv;
 
 switch (command) {
-  case 'status':     cmd_status();           break;
-  case 'validate':   cmd_validate(arg);      break;
-  case 'advance':    cmd_advance(arg);       break;
-  case 'checkpoint': cmd_checkpoint(arg);    break;
-  case 'adr':        cmd_adr();              break;
-  case 'verify':     cmd_verify();           break;
-  case 'run':        cmd_run();              break;
-  case 'done':       cmd_done();             break;
+  case 'status':     cmd_status();                break;
+  case 'validate':   cmd_validate(arg);           break;
+  case 'advance':    cmd_advance(arg);            break;
+  case 'checkpoint': cmd_checkpoint(arg);         break;
+  case 'meeting':    cmd_meeting(arg, arg2);      break;
+  case 'adr':        cmd_adr();                   break;
+  case 'verify':     cmd_verify();                break;
+  case 'run':        cmd_run();                   break;
+  case 'done':       cmd_done();                  break;
   default:
     console.log('Usage: node orchestrate.js <command>');
     console.log('Commands:');
-    console.log('  status              — show current pipeline state + checkpoints');
-    console.log('  validate <agent>    — check if agent inputs are ready');
-    console.log('  advance <agent>     — mark agent complete, move to next');
-    console.log('  checkpoint <A|B>    — record human approval at a pipeline checkpoint');
-    console.log('  adr                 — list all Architecture Decision Records');
-    console.log('  verify              — run typecheck, build, test, lighthouse');
-    console.log('  run                 — automated pipeline (polls for each advance)');
-    console.log('  done                — produce DONE.md');
+    console.log('  status                       — show current pipeline state + checkpoints');
+    console.log('  validate <agent>             — check if agent inputs are ready');
+    console.log('  advance <agent>              — mark agent complete, move to next');
+    console.log('  checkpoint <A|B>             — record human approval at a pipeline checkpoint');
+    console.log('  meeting [status]             — list all meetings and their status');
+    console.log('  meeting start <type>         — create a new meeting file');
+    console.log('  meeting close <filename>     — resolve or escalate a meeting');
+    console.log('  adr                          — list all Architecture Decision Records');
+    console.log('  verify                       — run typecheck, build, test, lighthouse');
+    console.log('  run                          — automated pipeline');
+    console.log('  done                         — produce DONE.md');
     console.log('');
     console.log(`Valid agents: ${Object.keys(AGENT_CONTRACTS).join(', ')}`);
+    console.log(`Meeting types: ${Object.keys(MEETING_TYPES).join(', ')}`);
     console.log('Checkpoints: A (scope + architecture), B (sprint review)');
     process.exit(1);
 }

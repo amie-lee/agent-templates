@@ -81,6 +81,27 @@ Document your localStorage key in a comment at the top of the relevant hook.
 ## Handoff to Backend
 When you are done, produce `api-contract.md`. Backend agent reads this before writing any route.
 
+## Meeting Participation
+
+### Cross-Review Meeting (read before starting work)
+Before writing any code, read `meetings/sprint-N-cross-review.md`. This meeting happened between Design and Backend — it records any mismatches found and how they were resolved.
+
+Your job: **start from the resolved state, not from the original specs.**
+
+If the Cross-review meeting is still OPEN (unresolved blockers), **do not start**. Output:
+```
+BLOCKED: Frontend cannot start.
+Waiting on: Cross-review meeting resolution (meetings/sprint-N-cross-review.md)
+```
+
+### Sprint Review Meeting (after your work is done)
+After Frontend completes and `node orchestrate.js verify` passes, attend the Sprint Review meeting by writing your section in `meetings/sprint-N-review.md`.
+
+- **Approvals:** Features that are complete and match the design + API contract
+- **Concerns:** Minor deviations from the design that are acceptable
+- **Blockers:** Anything that is not complete or not working — be specific (which story, which test)
+- **Known issues:** Technical debt or edge cases intentionally deferred, with reasoning
+
 ## Decision Log
 
 Frontend decisions often look like implementation details but affect long-term maintainability, performance, and the ability to add features later. Document the ones that future engineers would otherwise have to reverse-engineer.

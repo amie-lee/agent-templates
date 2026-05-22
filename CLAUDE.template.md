@@ -34,14 +34,21 @@ Do not proceed past a BLOCKED state. Wait for the user to resolve the blocker, t
 ## Agent execution order
 
 ```
-spec → arch → [CHECKPOINT A: human approval] → pm → design∥backend → frontend → qa → [CHECKPOINT B: human approval] → done
+spec → arch → [CHECKPOINT A] → pm
+  → [KICKOFF MEETING] → design ∥ backend ∥ qa-planning
+  → [CROSS-REVIEW MEETING] → frontend → qa-run
+  → [SPRINT REVIEW MEETING] → [CHECKPOINT B] → done
 ```
 
-- **spec** runs first. It produces `intake.md` before anything else. Claude must pause after intake.md is written and wait for the human to confirm their interpretation is correct before spec continues.
-- **arch** reads `intake.md` first — the verbatim human request is the most honest signal.
-- **design** and **backend** run in parallel after pm completes — dispatch both, wait for both.
-- **CHECKPOINT A** requires explicit human approval before pm can run: `node orchestrate.js checkpoint A`
-- **CHECKPOINT B** requires explicit human approval before done can run: `node orchestrate.js checkpoint B`
+- **spec** runs first. Produces `intake.md` before anything else — wait for human confirmation before continuing.
+- **arch** reads `intake.md` first.
+- **CHECKPOINT A** requires explicit human approval: `node orchestrate.js checkpoint A`
+- **Kickoff meeting** runs after pm completes: `node orchestrate.js meeting start kickoff` — all agents attend before any sprint work begins.
+- **design, backend, qa-planning** run in parallel — dispatch all three simultaneously after Kickoff meeting is RESOLVED.
+- **Cross-review meeting** after design+backend complete: `node orchestrate.js meeting start cross-review` — must be RESOLVED before frontend starts.
+- **frontend** reads the cross-review meeting before writing any code.
+- **Sprint Review meeting** after qa-run: `node orchestrate.js meeting start sprint-review` — must be complete before CHECKPOINT B.
+- **CHECKPOINT B** requires explicit human approval: `node orchestrate.js checkpoint B`
 
 ---
 
@@ -58,6 +65,18 @@ node orchestrate.js advance frontend
 ```
 
 ---
+
+## Meetings
+
+Three mandatory meetings gate pipeline transitions. Each is a document in `meetings/` — agents write their sections independently, orchestrator resolves and closes.
+
+| Meeting | Command | Blocks |
+|---------|---------|--------|
+| Kickoff | `node orchestrate.js meeting start kickoff` | Design+Backend+QA-Planning cannot start until RESOLVED |
+| Cross-review | `node orchestrate.js meeting start cross-review` | Frontend cannot start until RESOLVED |
+| Sprint Review | `node orchestrate.js meeting start sprint-review` | CHECKPOINT B cannot run until complete |
+
+If a meeting is ESCALATED (unresolved blockers), pause the pipeline. Do not advance any agent. Wait for the human to resolve and re-run `meeting close`.
 
 ## Architecture Decision Records (ADRs)
 
@@ -87,5 +106,6 @@ All ADRs use `adr/adr.template.md` as the base. Copy it, fill it in, do not modi
 | design | design-spec.md, design-tokens.md + ADRs for UX pattern choices |
 | backend | api-spec.yaml, api-samples.sh, schema.sql + ADRs for API / data model decisions |
 | frontend | src/ (components, hooks, tests/), api-contract.md + ADRs for state / architecture choices |
-| qa | qa-report.md, e2e/stories.spec.ts + ADRs for coverage exclusions / waived violations |
+| qa-planning | qa-plan.md, e2e/stories.spec.ts (skeleton) — raises testability concerns in Kickoff meeting |
+| qa-run | qa-report.md, e2e/stories.spec.ts (completed) + ADRs for coverage exclusions / waived violations |
 | orchestrator | DONE.md |

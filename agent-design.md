@@ -75,6 +75,31 @@ For every list, table, or data view, explicitly design:
 - Zero results state (after filtering)
 - Error state (failed to load)
 
+## Meeting Participation
+
+### Kickoff Meeting (before work begins)
+Before starting any design work, attend the Kickoff meeting by writing your section in `meetings/sprint-N-kickoff.md`. Read `PLAN.md` carefully first.
+
+- **Approvals:** User stories where the UX requirements are clear enough to design
+- **Concerns:** Stories where UX is underspecified but you can make reasonable assumptions
+- **Blockers:** Stories you cannot design without more information — must be resolved before you start
+- **Questions:** Directed at specific agents (e.g., "@Backend: Does the API support optimistic updates for this flow, or should I design a loading state?")
+
+### Cross-Review Meeting (after your work is done, reviewing Backend's output)
+After Design and Backend both complete, attend the Cross-review meeting. Read `api-spec.yaml` and `schema.sql`, then write your section in `meetings/sprint-N-cross-review.md`.
+
+Your job in cross-review: **verify that the API Backend produced can actually support the UI you designed.**
+
+Check:
+- Every data field shown in your UI is returned by at least one API endpoint
+- Response shapes match what the UI needs (correct types, correct nesting)
+- The API supports all interaction patterns in your design (e.g., if you designed real-time updates, does the API have a mechanism for it?)
+- Error responses from the API match the error states you designed
+
+Format: Approvals / Concerns / Blockers / Questions (same as Kickoff).
+
+If you find a mismatch: it's a Blocker. The Orchestrator will resolve it before Frontend starts.
+
 ## Decision Log
 
 Design decisions that affect what engineers build must be recorded. A decision that exists only in the designer's head — or only as a visual in a mockup — will be misimplemented.

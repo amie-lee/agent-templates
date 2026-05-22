@@ -35,6 +35,7 @@ const ROOT_TEMPLATE_FILES = [
   { src: "requirements.template.md", dest: "requirements.md" },
   { src: "use-cases.template.md",    dest: "use-cases.md" },
   { src: "adr.template.md",          dest: "adr/adr.template.md" },
+  { src: "meeting.template.md",      dest: "meetings/meeting.template.md" },
   { src: "intake.template.md",       dest: "intake.md" },
 ];
 
@@ -103,6 +104,7 @@ function main() {
   const projectDir = path.join(process.cwd(), dirName);
   const agentsDir = path.join(projectDir, "agents");
   const adrDir = path.join(projectDir, "adr");
+  const meetingsDir = path.join(projectDir, "meetings");
 
   // 1. Create project directory
   if (fs.existsSync(projectDir)) {
@@ -113,9 +115,11 @@ function main() {
   fs.mkdirSync(projectDir, { recursive: true });
   fs.mkdirSync(agentsDir, { recursive: true });
   fs.mkdirSync(adrDir, { recursive: true });
+  fs.mkdirSync(meetingsDir, { recursive: true });
   log(green(`✓`) + ` Created ${dirName}/`);
   log(green(`✓`) + ` Created ${dirName}/agents/`);
   log(green(`✓`) + ` Created ${dirName}/adr/`);
+  log(green(`✓`) + ` Created ${dirName}/meetings/`);
 
   // 2. Generate PLAN.md from template
   const templatePath = path.join(__dirname, "PLAN.template.md");
@@ -224,6 +228,8 @@ function main() {
   log(`  ├── .gitignore`);
   log(`  ├── adr/`);
   log(`  │   └── ADR-000-index.md`);
+  log(`  ├── meetings/`);
+  log(`  │   └── meeting.template.md`);
   log(`  └── agents/`);
   for (const f of AGENT_FILES) {
     if (fs.existsSync(path.join(agentsDir, f))) {
@@ -246,7 +252,11 @@ function main() {
   log(`  5. When all agents complete:`);
   log(`     node orchestrate.js done`);
   log("");
-  log(`  ${cyan("Pipeline order:")} spec → arch → [CHECKPOINT A] → pm → design∥backend → frontend → qa → [CHECKPOINT B] → done`);
+  log(`  ${cyan("Pipeline order:")}`);
+  log(`    spec → arch → [CHECKPOINT A] → pm`);
+  log(`    → [KICKOFF MEETING] → design∥backend∥qa-planning`);
+  log(`    → [CROSS-REVIEW MEETING] → frontend → qa-run`);
+  log(`    → [SPRINT REVIEW MEETING] → [CHECKPOINT B] → done`);
   log(`  ${cyan("Tip:")} After frontend agent, run verify before advance:`);
   log(`     node orchestrate.js verify`);
   log("");

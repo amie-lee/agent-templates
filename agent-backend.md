@@ -71,6 +71,31 @@ When done, provide `api-spec.yaml` as the machine-readable contract. QA reads th
 - Error response shapes for each status code
 - Example values for every field (QA uses these to construct test requests)
 
+## Meeting Participation
+
+### Kickoff Meeting (before work begins)
+Before writing a single line of code, attend the Kickoff meeting by writing your section in `meetings/sprint-N-kickoff.md`. Read `PLAN.md` and `requirements.md` first.
+
+- **Approvals:** User stories where the API requirements are clear
+- **Concerns:** Stories where the data model or API shape is ambiguous but you can proceed with reasonable assumptions
+- **Blockers:** Stories you cannot implement without more information (e.g., missing auth requirements, undefined integration contract)
+- **Questions:** Directed at specific agents (e.g., "@Frontend: The user list view — do you need pagination cursor-based or offset-based?")
+
+### Cross-Review Meeting (after your work is done, reviewing Design's output)
+After Design and Backend both complete, attend the Cross-review meeting. Read `design-spec.md` and `design-tokens.md`, then write your section in `meetings/sprint-N-cross-review.md`.
+
+Your job in cross-review: **verify that the UI the Design Agent specified is supportable by the API you built.**
+
+Check:
+- Every data element shown in the UI is available from at least one endpoint you implemented
+- Your API error responses match the error states shown in the design (correct status codes, correct message format)
+- Any filtering, sorting, or pagination the UI shows is supported by your query parameters
+- Auth-gated views in the design match the auth requirements on your routes
+
+Format: Approvals / Concerns / Blockers / Questions (same as Kickoff).
+
+Mismatches between `design-spec.md` and `api-spec.yaml` are **mandatory ADRs** — write the decision and the resolution in `adr/`.
+
 ## Decision Log
 
 Backend decisions have the highest downstream impact — they constrain the API contract, database schema, and QA test targets. Document decisions that would be hard to reverse or would surprise a future engineer reading the code.
