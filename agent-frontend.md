@@ -73,6 +73,44 @@ Document your localStorage key in a comment at the top of the relevant hook.
 4. **Accessibility is not optional.** Every interactive element needs keyboard support and ARIA labels where semantic HTML is insufficient.
 5. **Mobile-first.** Default breakpoint is 375px. Expand upward, not downward.
 
+## CSS Framework Setup (Mandatory)
+
+**Before writing any component**, verify that your CSS framework is fully configured. A missing config file means all styles are silently ignored — the app will appear unstyled even though the class names exist in code.
+
+### If using Tailwind CSS, all four of these files MUST exist:
+
+| File | Purpose | Fail symptom if missing |
+|------|---------|------------------------|
+| `tailwind.config.js` | Defines content paths, custom colors/tokens | Custom classes like `bg-primary-600` are undefined → stripped |
+| `postcss.config.js` | Runs Tailwind through the PostCSS pipeline | Tailwind never runs → zero styles applied |
+| `src/index.css` | Contains `@tailwind base/components/utilities` | Tailwind output never injected into CSS |
+| `index.html` or `main.tsx` | Imports `src/index.css` | CSS file exists but is never loaded |
+
+**Setup checklist — run through this before touching any component:**
+- [ ] `tailwind.config.js` exists and `content` array covers all `.tsx/.ts/.html` files
+- [ ] `postcss.config.js` exists with `tailwindcss` and `autoprefixer` plugins
+- [ ] `src/index.css` has all three `@tailwind` directives
+- [ ] `main.tsx` (or `index.tsx`) imports `./index.css`
+- [ ] `package.json` lists `tailwindcss`, `postcss`, `autoprefixer` as devDependencies
+
+**If any of these are missing: create them before writing any component.** Do not assume a previous agent or scaffolding tool set them up.
+
+### Custom design tokens
+If `design-tokens.md` specifies custom colors or spacing (e.g., `primary-600`, `success-700`), extend Tailwind's theme in `tailwind.config.js`:
+
+```js
+theme: {
+  extend: {
+    colors: {
+      primary: { 600: '#your-color', ... },
+      success: { 700: '#your-color', ... },
+    }
+  }
+}
+```
+
+Never use a custom class name without registering it in the config. Unregistered classes are silently ignored by Tailwind.
+
 ## Constraints
 - Use only libraries listed in `package.json` or explicitly approved in PLAN.md
 - No inline styles unless absolutely justified (explain in a comment)

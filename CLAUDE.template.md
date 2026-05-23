@@ -64,6 +64,17 @@ node orchestrate.js verify
 node orchestrate.js advance frontend
 ```
 
+**Before calling `advance frontend`, also confirm CSS framework setup is complete:**
+
+```bash
+# Tailwind setup check — all four must exist
+ls tailwind.config.js postcss.config.js src/index.css
+grep "@tailwind" src/index.css
+grep "index.css" src/main.tsx index.html 2>/dev/null
+```
+
+If any of these fail, the frontend agent missed its CSS setup step. Have it create the missing files before advancing. A frontend that builds successfully but renders without styles is not complete.
+
 ---
 
 ## Sprint Boundary Enforcement
