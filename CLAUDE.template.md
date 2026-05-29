@@ -16,6 +16,66 @@ On session start in this project root:
 
 ---
 
+## Git Rules
+
+### Project initialization
+When the project is first created (before Spec Agent runs), initialize a git repository:
+
+```bash
+git init
+git add .
+git commit -m "chore: init project scaffold"
+```
+
+### Commit after every agent
+After `node orchestrate.js advance <agent>` succeeds (not BLOCKED), immediately commit:
+
+```bash
+git add .
+git commit -m "<type>(<agent>): <one-line summary of what was produced>"
+```
+
+Commit message format:
+
+| Agent | Type | Example |
+|---|---|---|
+| spec | docs | `docs(spec): add requirements, use-cases, intent` |
+| arch | docs | `docs(arch): ADR-001 — React + Express + MySQL` |
+| pm | docs | `docs(pm): sprint-1 plan, 5 stories scoped` |
+| design | docs | `docs(design): design-spec and tokens for sprint 1` |
+| backend | feat | `feat(backend): implement auth, attendance, leave APIs` |
+| frontend | feat | `feat(frontend): implement login, dashboard, attendance pages` |
+| qa-planning | test | `test(qa): qa-plan and E2E skeletons for sprint 1` |
+| qa-run | test | `test(qa): E2E tests complete, qa-report sprint 1` |
+
+### Commit after meetings
+After a meeting is RESOLVED, commit the meeting file:
+
+```bash
+git add meetings/
+git commit -m "docs(meeting): sprint-1 kickoff resolved"
+```
+
+### Commit after checkpoints
+After human approves a checkpoint:
+
+```bash
+git add cycle-state.json
+git commit -m "chore: checkpoint A approved"
+# or
+git commit -m "chore: checkpoint B approved — sprint 1 complete"
+```
+
+### Never commit
+- `.env` files
+- `node_modules/`
+- `verify-report.json` (generated artifact, not source)
+- `.current-agent`
+
+These are already in `.gitignore`.
+
+---
+
 ## BLOCKED output format
 
 When the pipeline cannot proceed, emit exactly:
