@@ -34,10 +34,12 @@ const ROOT_TEMPLATE_FILES = [
   { src: "CLAUDE.template.md",      dest: "CLAUDE.md" },
   { src: "requirements.template.md", dest: "requirements.md" },
   { src: "use-cases.template.md",    dest: "use-cases.md" },
+  { src: "intent.template.md",       dest: "intent.md" },
   { src: "adr.template.md",          dest: "adr/adr.template.md" },
   { src: "meeting.template.md",      dest: "meetings/meeting.template.md" },
   { src: "intake.template.md",       dest: "intake.md" },
   { src: "sprint-backlog.template.md", dest: "sprint-backlog.md" },
+  { src: "sprint-plan.template.md",  dest: "sprint-plan.template.md" },
 ];
 
 const INITIAL_CYCLE_STATE = {
@@ -72,6 +74,7 @@ const INITIAL_CYCLE_STATE = {
     "design-tokens.md": false,
     "api-spec.yaml": false,
     "api-samples.sh": false,
+    "schema.sql": false,
     "api-contract.md": false,
     "verify-report.json": false,
     "qa-report.md": false,
@@ -81,7 +84,11 @@ const INITIAL_CYCLE_STATE = {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function today() {
-  return new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function colorize(text, code) {
@@ -97,6 +104,32 @@ function log(msg) {
   console.log(msg);
 }
 
+function resolveProjectPaths(projectArg) {
+  const looksLikePath =
+    path.isAbsolute(projectArg) ||
+    projectArg.includes(path.sep) ||
+    projectArg.includes("/");
+
+  if (!looksLikePath) {
+    const dirName = projectArg
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "");
+
+    return {
+      projectDir: path.join(process.cwd(), dirName),
+      dirName,
+      projectLabel: projectArg,
+    };
+  }
+
+  return {
+    projectDir: path.resolve(projectArg),
+    dirName: path.basename(path.resolve(projectArg)),
+    projectLabel: path.basename(path.resolve(projectArg)),
+  };
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 function main() {
@@ -108,20 +141,14 @@ function main() {
     process.exit(1);
   }
 
-  // Sanitize project name for directory
-  const dirName = projectName
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "");
-
-  const projectDir = path.join(process.cwd(), dirName);
+  const { projectDir, dirName, projectLabel } = resolveProjectPaths(projectName);
   const agentsDir = path.join(projectDir, "agents");
   const adrDir = path.join(projectDir, "adr");
   const meetingsDir = path.join(projectDir, "meetings");
 
   // 1. Create project directory
   if (fs.existsSync(projectDir)) {
-    console.error(`Error: Directory "${dirName}" already exists.`);
+    console.error(`Error: Directory "${projectDir}" already exists.`);
     process.exit(1);
   }
 
@@ -147,7 +174,7 @@ function main() {
 
   // Replace placeholder values
   planContent = planContent
-    .replace("[Project Name]", projectName)
+    .replace("[Project Name]", projectLabel)
     .replace("[DATE]", today());
 
   fs.writeFileSync(path.join(projectDir, "PLAN.md"), planContent);
@@ -183,7 +210,7 @@ function main() {
   // 6. Write cycle-state.json
   const state = {
     ...INITIAL_CYCLE_STATE,
-    projectName,
+    projectName: projectLabel,
     createdAt: today(),
   };
   fs.writeFileSync(
@@ -193,13 +220,13 @@ function main() {
   log(green(`✓`) + ` Created cycle-state.json`);
 
   // 7. Create .gitignore
-  const gitignore = `.env\n.env.local\nnode_modules/\n.DS_Store\n.current-agent\nlighthouse-report.json\n`;
+  const gitignore = `.env\n.env.local\nnode_modules/\n.DS_Store\n.current-agent\nlighthouse-report.json\nverify-report.json\n`;
   fs.writeFileSync(path.join(projectDir, ".gitignore"), gitignore);
   log(green(`✓`) + ` Created .gitignore`);
 
   // Write ADR index
   const adrIndex = [
-    `# ADR Index — ${projectName}`,
+    `# ADR Index — ${projectLabel}`,
     `> Architecture Decision Records accumulate here throughout the development cycle.`,
     `> Every agent writes ADRs for significant decisions. Run \`node orchestrate.js adr\` to list them.`,
     `>`,
@@ -227,7 +254,7 @@ function main() {
 
   // 8. Print summary
   log("");
-  log(bold(`🚀 Project "${projectName}" initialized`));
+  log(bold(`🚀 Project "${projectLabel}" initialized`));
   log("");
   log(`  ${cyan("Structure:")}`);
   log(`  ${dirName}/`);

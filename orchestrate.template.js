@@ -49,7 +49,7 @@ const AGENT_CONTRACTS = {
   },
   frontend: {
     requires: ['PLAN.md', 'design-spec.md', 'api-spec.yaml'],
-    produces: ['verify-report.json', 'src/tests/'],
+    produces: ['api-contract.md', 'verify-report.json', 'src/tests/'],
   },
   'qa-planning': {
     requires: ['PLAN.md', 'requirements.md'],
@@ -71,9 +71,6 @@ const MEETING_TYPES = {
   'sprint-review': { trigger: 'QA Run completed', attendees: ['design', 'backend', 'frontend', 'qa-run'] },
 };
 
-// Linear pipeline for sequential dispatch (parallel steps handled separately)
-const AGENT_PIPELINE = ['spec', 'arch', 'pm', 'design', 'backend', 'qa-planning', 'frontend', 'qa-run'];
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function readState() {
@@ -85,7 +82,69 @@ function readState() {
   return JSON.parse(fs.readFileSync(p, 'utf8'));
 }
 
+function listAdrFiles() {
+  const adrDir = path.join(process.cwd(), 'adr');
+  if (!fs.existsSync(adrDir)) return [];
+
+  return fs.readdirSync(adrDir)
+    .filter(f => f.endsWith('.md') && !['ADR-000-index.md', 'adr.template.md'].includes(f))
+    .sort();
+}
+
+function computePipelineState(state) {
+  const completed = new Set(state.completed || []);
+  const checkpoints = state.checkpoints || {};
+  const meetings = state.meetings || {};
+
+  if (!completed.has('spec')) {
+    return { phase: 'spec', pending: ['spec'] };
+  }
+  if (!completed.has('arch')) {
+    return { phase: 'arch', pending: ['arch'] };
+  }
+  if (checkpoints.A !== 'approved') {
+    return { phase: 'checkpoint-A', pending: [] };
+  }
+  if (!completed.has('pm')) {
+    return { phase: 'pm', pending: ['pm'] };
+  }
+  if (meetings.kickoff !== 'resolved') {
+    return { phase: 'meeting-kickoff', pending: [] };
+  }
+
+  const sprintWorkPending = ['design', 'backend', 'qa-planning'].filter(agent => !completed.has(agent));
+  if (sprintWorkPending.length > 0) {
+    return { phase: 'sprint-work', pending: sprintWorkPending };
+  }
+
+  if (meetings['cross-review'] !== 'resolved') {
+    return { phase: 'meeting-cross-review', pending: [] };
+  }
+  if (!completed.has('frontend')) {
+    return { phase: 'frontend', pending: ['frontend'] };
+  }
+  if (!completed.has('qa-run')) {
+    return { phase: 'qa-run', pending: ['qa-run'] };
+  }
+  if (meetings['sprint-review'] !== 'resolved') {
+    return { phase: 'meeting-sprint-review', pending: [] };
+  }
+  if (checkpoints.B !== 'approved') {
+    return { phase: 'checkpoint-B', pending: [] };
+  }
+
+  return { phase: 'done', pending: [] };
+}
+
+function syncState(state) {
+  const pipeline = computePipelineState(state);
+  state.phase = pipeline.phase;
+  state.pending = pipeline.pending;
+  return state;
+}
+
 function writeState(state) {
+  syncState(state);
   fs.writeFileSync(
     path.join(process.cwd(), 'cycle-state.json'),
     JSON.stringify(state, null, 2)
@@ -105,10 +164,17 @@ function run(cmd) {
   }
 }
 
+function formatLocalDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 function cmd_status() {
-  const state = readState();
+  const state = syncState(readState());
 
   const sprintNum = state.sprint || 1;
   const goal = state.sprintGoal || '(not set)';
@@ -141,9 +207,18 @@ function cmd_status() {
   console.log('\nArtifacts:');
   for (const [artifact, recorded] of Object.entries(state.artifacts || {})) {
     const exists = fileExists(artifact);
-    const marker = exists ? '✓' : '✗';
-    const mismatch = recorded !== exists ? ' ⚠ mismatch' : '';
-    console.log(`  ${marker} ${artifact}${mismatch}`);
+    let marker = '✗';
+    let note = '';
+
+    if (recorded) {
+      marker = '✓';
+      note = exists ? '' : ' ⚠ recorded missing on disk';
+    } else if (exists) {
+      marker = '○';
+      note = ' template/not completed';
+    }
+
+    console.log(`  ${marker} ${artifact}${note}`);
   }
   console.log('');
 }
@@ -181,6 +256,39 @@ function cmd_validate(agent) {
     }
   }
 
+  if (agent === 'design' || agent === 'backend' || agent === 'qa-planning') {
+    const state = syncState(readState());
+    if ((state.meetings || {}).kickoff !== 'resolved') {
+      console.log('PIPELINE STOPPED');
+      console.log(`Agent: ${agent}`);
+      console.log('Waiting on: kickoff meeting resolution');
+      console.log('Action needed: Run node orchestrate.js meeting start kickoff, resolve it, then node orchestrate.js meeting close sprint-XX-kickoff.md');
+      process.exit(1);
+    }
+  }
+
+  if (agent === 'frontend') {
+    const state = syncState(readState());
+    if ((state.meetings || {})['cross-review'] !== 'resolved') {
+      console.log('PIPELINE STOPPED');
+      console.log(`Agent: ${agent}`);
+      console.log('Waiting on: cross-review meeting resolution');
+      console.log('Action needed: Run node orchestrate.js meeting start cross-review, resolve it, then node orchestrate.js meeting close sprint-XX-cross-review.md');
+      process.exit(1);
+    }
+  }
+
+  if (agent === 'qa-run') {
+    const state = syncState(readState());
+    if (!fileExists('verify-report.json')) {
+      console.log('PIPELINE STOPPED');
+      console.log(`Agent: ${agent}`);
+      console.log('Missing: verify-report.json');
+      console.log('Action needed: Run node orchestrate.js verify before starting qa-run');
+      process.exit(1);
+    }
+  }
+
   const missing = contract.requires.filter(f => !fileExists(f));
 
   if (missing.length === 0) {
@@ -209,7 +317,7 @@ function cmd_checkpoint(label) {
     process.exit(1);
   }
   const cp = label.toUpperCase();
-  const state = readState();
+  const state = syncState(readState());
   state.checkpoints = state.checkpoints || {};
   state.checkpoints[cp] = 'approved';
   writeState(state);
@@ -232,8 +340,14 @@ function cmd_advance(agent) {
     process.exit(1);
   }
 
-  const state = readState();
+  const state = syncState(readState());
   const contract = AGENT_CONTRACTS[agent];
+
+  if (!contract) {
+    console.error(`Unknown agent: ${agent}`);
+    console.error(`Valid agents: ${Object.keys(AGENT_CONTRACTS).join(', ')}`);
+    process.exit(1);
+  }
 
   // Warn if expected produces are missing
   if (contract) {
@@ -249,23 +363,8 @@ function cmd_advance(agent) {
     }
   }
 
-  // Update completed / pending
   if (!state.completed.includes(agent)) {
     state.completed.push(agent);
-  }
-  state.pending = (state.pending || []).filter(a => a !== agent);
-
-  // Advance phase to next pipeline agent
-  const idx = AGENT_PIPELINE.indexOf(agent);
-  if (idx >= 0 && idx < AGENT_PIPELINE.length - 1) {
-    const next = AGENT_PIPELINE[idx + 1];
-    if (!state.completed.includes(next) && !(state.pending || []).includes(next)) {
-      state.pending = state.pending || [];
-      state.pending.push(next);
-    }
-    state.phase = next;
-  } else if (idx === AGENT_PIPELINE.length - 1) {
-    state.phase = 'done';
   }
 
   // Update artifacts map
@@ -352,8 +451,39 @@ function cmd_run() {
 
   function runNextAgent() {
     const state = readState();
+    syncState(state);
 
     if (state.phase === 'done' || !state.pending || state.pending.length === 0) {
+      if (state.phase === 'checkpoint-A') {
+        console.log('\nPIPELINE STOPPED');
+        console.log('Waiting on: CHECKPOINT A');
+        console.log('Action needed: Review outputs, then run: node orchestrate.js checkpoint A');
+        return;
+      }
+      if (state.phase === 'checkpoint-B') {
+        console.log('\nPIPELINE STOPPED');
+        console.log('Waiting on: CHECKPOINT B');
+        console.log('Action needed: Review outputs, then run: node orchestrate.js checkpoint B');
+        return;
+      }
+      if (state.phase === 'meeting-kickoff') {
+        console.log('\nPIPELINE STOPPED');
+        console.log('Waiting on: kickoff meeting resolution');
+        console.log('Action needed: node orchestrate.js meeting start kickoff');
+        return;
+      }
+      if (state.phase === 'meeting-cross-review') {
+        console.log('\nPIPELINE STOPPED');
+        console.log('Waiting on: cross-review meeting resolution');
+        console.log('Action needed: node orchestrate.js meeting start cross-review');
+        return;
+      }
+      if (state.phase === 'meeting-sprint-review') {
+        console.log('\nPIPELINE STOPPED');
+        console.log('Waiting on: sprint-review meeting resolution');
+        console.log('Action needed: node orchestrate.js meeting start sprint-review');
+        return;
+      }
       console.log('\n✓ Pipeline complete. Run: node orchestrate.js done');
       return;
     }
@@ -393,8 +523,8 @@ function cmd_run() {
 }
 
 function cmd_report() {
-  const state = readState();
-  const date = new Date().toISOString().split('T')[0];
+  const state = syncState(readState());
+  const date = formatLocalDate();
   const projectName = state.projectName || 'Project';
   const sprint = state.sprint || 1;
   const lines = [];
@@ -441,13 +571,14 @@ function cmd_report() {
     'qa-plan.md':             'QA test plan written (qa-plan.md)',
     'design-spec.md':         'UI design complete (design-spec.md)',
     'api-spec.yaml':          'API designed (api-spec.yaml)',
+    'schema.sql':             'Database schema designed (schema.sql)',
     'api-contract.md':        'API contract confirmed (api-contract.md)',
     'verify-report.json':     'Build + tests verified (verify-report.json)',
     'qa-report.md':           'QA report complete (qa-report.md)',
   };
   let anyDone = false;
   for (const [file, label] of Object.entries(agentLabels)) {
-    if (fileExists(file)) {
+    if (artifacts[file] === true) {
       lines.push(`  ✓ ${label}`);
       anyDone = true;
     }
@@ -485,6 +616,10 @@ function cmd_report() {
     }
   } else if (state.phase === 'done') {
     lines.push('  Sprint complete.');
+  } else if (state.phase.startsWith('meeting-')) {
+    lines.push(`  Waiting on ${state.phase.replace('meeting-', '')} meeting resolution.`);
+  } else if (state.phase.startsWith('checkpoint-')) {
+    lines.push(`  Waiting on ${state.phase.replace('checkpoint-', 'CHECKPOINT ')} approval.`);
   } else {
     lines.push('  (pipeline not yet started)');
   }
@@ -509,7 +644,7 @@ function cmd_report() {
   // ── ADRs ──────────────────────────────────────────────
   const adrDir = path.join(process.cwd(), 'adr');
   if (fs.existsSync(adrDir)) {
-    const adrFiles = fs.readdirSync(adrDir).filter(f => f.endsWith('.md') && f !== 'ADR-000-index.md');
+    const adrFiles = listAdrFiles();
     if (adrFiles.length > 0) {
       lines.push('');
       lines.push(`DECISIONS RECORDED (${adrFiles.length} ADRs)`);
@@ -595,7 +730,7 @@ function cmd_report() {
 }
 
 function cmd_sprint(subcommand, ...args) {
-  const state = readState();
+  const state = syncState(readState());
   const sprint = state.sprint || 1;
 
   if (!subcommand || subcommand === 'status') {
@@ -613,9 +748,7 @@ function cmd_sprint(subcommand, ...args) {
     // Show backlog count if file exists
     const backlogPath = path.join(process.cwd(), 'sprint-backlog.md');
     if (fs.existsSync(backlogPath)) {
-      const content = fs.readFileSync(backlogPath, 'utf8');
-      const midSprintItems = (content.match(/\| \[DATE\]/g) || []).length;
-      console.log(`Backlog:   sprint-backlog.md exists — check for mid-sprint discoveries`);
+      console.log('Backlog:   sprint-backlog.md exists — check for mid-sprint discoveries');
     }
 
     if (state.sprintHistory && state.sprintHistory.length > 0) {
@@ -671,7 +804,7 @@ function cmd_sprint(subcommand, ...args) {
       planned: state.sprintStoriesPlanned || 0,
       completed: state.sprintStoriesCompleted || 0,
       deferred: state.sprintStoriesDeferred || 0,
-      date: new Date().toISOString().split('T')[0],
+      date: formatLocalDate(),
     });
     state.sprintHistory = history;
     state.sprint = sprint + 1;
@@ -680,8 +813,6 @@ function cmd_sprint(subcommand, ...args) {
     state.sprintStoriesCompleted = 0;
     state.sprintStoriesDeferred = 0;
     // Reset sprint-level state
-    state.phase = 'pm';
-    state.pending = ['pm'];
     state.completed = state.completed.filter(a => ['spec', 'arch'].includes(a));
     state.checkpoints = { A: 'approved', B: 'pending' };
     state.meetings = { kickoff: 'pending', 'cross-review': 'pending', 'sprint-review': 'pending' };
@@ -750,7 +881,7 @@ function cmd_meeting(subcommand, arg) {
     }
     const state = readState();
     const sprint = state.sprint || 1;
-    const date = new Date().toISOString().split('T')[0];
+    const date = formatLocalDate();
     const filename = `sprint-${String(sprint).padStart(2, '0')}-${type}.md`;
     const filepath = path.join(meetingDir, filename);
 
@@ -760,17 +891,16 @@ function cmd_meeting(subcommand, arg) {
       process.exit(0);
     }
 
-    const templatePath = path.join(process.cwd(), 'meeting.template.md');
+    const templatePath = path.join(process.cwd(), MEETING_DIR, 'meeting.template.md');
     let content;
     if (fs.existsSync(templatePath)) {
       content = fs.readFileSync(templatePath, 'utf8')
         .replace('[Type]', type.toUpperCase())
         .replace('Sprint [N]', `Sprint ${sprint}`)
         .replace('[Date]', date)
-        .replace('KICKOFF | CROSS-REVIEW | SPRINT-REVIEW', type.toUpperCase())
-        .replace('[What event caused this meeting — e.g., "PLAN.md completed"]', MEETING_TYPES[type].trigger);
+        .replace('KICKOFF | CROSS-REVIEW | SPRINT-REVIEW', type.toUpperCase());
     } else {
-      content = `# Meeting: ${type.toUpperCase()} — Sprint ${sprint} — ${date}\n> Status: OPEN\n\n(meeting.template.md not found — fill in manually)\n`;
+      content = `# Meeting: ${type.toUpperCase()} — Sprint ${sprint} — ${date}\n> **Type:** ${type.toUpperCase()}\n> **Status:** OPEN → RESOLVED | ESCALATED\n\n(meeting.template.md not found — fill in manually)\n`;
     }
 
     fs.writeFileSync(filepath, content);
@@ -792,19 +922,24 @@ function cmd_meeting(subcommand, arg) {
       console.error(`Meeting file not found: meetings/${filename}`);
       process.exit(1);
     }
+    const state = syncState(readState());
     let content = fs.readFileSync(filepath, 'utf8');
 
-    // Check for unresolved blockers (simple heuristic: look for ESCALATED in Unresolved section)
-    const hasEscalation = content.includes('ESCALATED') && !content.includes('Status: RESOLVED');
+    const hasEscalation =
+      /^> \*\*Status:\*\*\s*ESCALATED/m.test(content) ||
+      /^\*\*Status:\*\*\s*ESCALATED/m.test(content);
     const newStatus = hasEscalation ? 'ESCALATED' : 'RESOLVED';
 
     // Update status line
-    content = content.replace(
-      /\*\*Status:\*\* OPEN.*|> \*\*Status:\*\* OPEN.*/,
-      `> **Status:** ${newStatus}`
-    );
+    content = content.replace(/^>?\s*\*\*Status:\*\*.*$/m, `> **Status:** ${newStatus}`);
 
     fs.writeFileSync(filepath, content);
+    const typeMatch = filename.match(/-(kickoff|cross-review|sprint-review)\.md$/);
+    if (typeMatch) {
+      state.meetings = state.meetings || {};
+      state.meetings[typeMatch[1]] = newStatus.toLowerCase();
+      writeState(state);
+    }
     console.log(`✓ Meeting closed: meetings/${filename} — Status: ${newStatus}`);
     if (newStatus === 'ESCALATED') {
       console.log(`  ⚠ Meeting has unresolved items. Pipeline is paused.`);
@@ -830,9 +965,7 @@ function cmd_adr() {
     return;
   }
 
-  const files = fs.readdirSync(adrDir)
-    .filter(f => f.endsWith('.md') && f !== 'ADR-000-index.md')
-    .sort();
+  const files = listAdrFiles();
 
   if (files.length === 0) {
     console.log('\nNo ADRs written yet (adr/ only has the index).\n');
@@ -879,9 +1012,15 @@ function cmd_adr() {
 }
 
 function cmd_done() {
-  const state = readState();
-  const date = new Date().toISOString().split('T')[0];
+  const state = syncState(readState());
+  const date = formatLocalDate();
   const projectName = state.projectName || 'Project';
+
+  if ((state.checkpoints || {}).B !== 'approved') {
+    console.error('Cannot produce DONE.md before CHECKPOINT B is approved.');
+    console.error('Run: node orchestrate.js checkpoint B');
+    process.exit(1);
+  }
 
   const completedList = state.completed
     .map(a => `- ${a} agent completed`)

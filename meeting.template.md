@@ -1,6 +1,6 @@
 # Meeting: [Type] — Sprint [N] — [Date]
-> Type: KICKOFF | CROSS-REVIEW | SPRINT-REVIEW
-> Status: OPEN → RESOLVED | ESCALATED
+> **Type:** KICKOFF | CROSS-REVIEW | SPRINT-REVIEW
+> **Status:** OPEN → RESOLVED | ESCALATED
 
 ---
 
