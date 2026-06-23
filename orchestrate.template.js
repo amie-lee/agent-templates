@@ -91,10 +91,37 @@ function listAdrFiles() {
     .sort();
 }
 
+function createMeetingRecord(status = 'pending', file = null, updatedAt = null) {
+  return { status, file, updatedAt };
+}
+
+function normalizeMeetings(meetings = {}) {
+  const normalized = {};
+  for (const type of Object.keys(MEETING_TYPES)) {
+    const value = meetings[type];
+    if (!value) {
+      normalized[type] = createMeetingRecord();
+    } else if (typeof value === 'string') {
+      normalized[type] = createMeetingRecord(value);
+    } else {
+      normalized[type] = createMeetingRecord(
+        value.status || 'pending',
+        value.file || null,
+        value.updatedAt || null
+      );
+    }
+  }
+  return normalized;
+}
+
+function getMeetingStatus(state, type) {
+  const meetings = normalizeMeetings(state.meetings);
+  return meetings[type]?.status || 'pending';
+}
+
 function computePipelineState(state) {
   const completed = new Set(state.completed || []);
   const checkpoints = state.checkpoints || {};
-  const meetings = state.meetings || {};
 
   if (!completed.has('spec')) {
     return { phase: 'spec', pending: ['spec'] };
@@ -108,7 +135,7 @@ function computePipelineState(state) {
   if (!completed.has('pm')) {
     return { phase: 'pm', pending: ['pm'] };
   }
-  if (meetings.kickoff !== 'resolved') {
+  if (getMeetingStatus(state, 'kickoff') !== 'resolved') {
     return { phase: 'meeting-kickoff', pending: [] };
   }
 
@@ -117,7 +144,7 @@ function computePipelineState(state) {
     return { phase: 'sprint-work', pending: sprintWorkPending };
   }
 
-  if (meetings['cross-review'] !== 'resolved') {
+  if (getMeetingStatus(state, 'cross-review') !== 'resolved') {
     return { phase: 'meeting-cross-review', pending: [] };
   }
   if (!completed.has('frontend')) {
@@ -126,7 +153,7 @@ function computePipelineState(state) {
   if (!completed.has('qa-run')) {
     return { phase: 'qa-run', pending: ['qa-run'] };
   }
-  if (meetings['sprint-review'] !== 'resolved') {
+  if (getMeetingStatus(state, 'sprint-review') !== 'resolved') {
     return { phase: 'meeting-sprint-review', pending: [] };
   }
   if (checkpoints.B !== 'approved') {
@@ -137,6 +164,7 @@ function computePipelineState(state) {
 }
 
 function syncState(state) {
+  state.meetings = normalizeMeetings(state.meetings);
   const pipeline = computePipelineState(state);
   state.phase = pipeline.phase;
   state.pending = pipeline.pending;
@@ -263,11 +291,11 @@ function cmd_status() {
   console.log(`  ${checkpoints.A === 'approved' ? '✓' : '○'} CHECKPOINT A — Scope + Architecture approval`);
   console.log(`  ${checkpoints.B === 'approved' ? '✓' : '○'} CHECKPOINT B — Sprint review`);
 
-  const meetings = state.meetings || {};
+  const meetings = normalizeMeetings(state.meetings);
   console.log('\nMeetings:');
-  console.log(`  ${meetings.kickoff === 'resolved' ? '✓' : '○'} Kickoff`);
-  console.log(`  ${meetings['cross-review'] === 'resolved' ? '✓' : '○'} Cross-review`);
-  console.log(`  ${meetings['sprint-review'] === 'resolved' ? '✓' : '○'} Sprint Review`);
+  console.log(`  ${meetings.kickoff.status === 'resolved' ? '✓' : '○'} Kickoff`);
+  console.log(`  ${meetings['cross-review'].status === 'resolved' ? '✓' : '○'} Cross-review`);
+  console.log(`  ${meetings['sprint-review'].status === 'resolved' ? '✓' : '○'} Sprint Review`);
 
   console.log('\nArtifacts:');
   for (const [artifact, recorded] of Object.entries(state.artifacts || {})) {
@@ -322,7 +350,7 @@ function cmd_validate(agent) {
   }
 
   if (agent === 'design' || agent === 'backend' || agent === 'qa-planning') {
-    if ((state.meetings || {}).kickoff !== 'resolved') {
+    if (getMeetingStatus(state, 'kickoff') !== 'resolved') {
       console.log('PIPELINE STOPPED');
       console.log(`Agent: ${agent}`);
       console.log('Waiting on: kickoff meeting resolution');
@@ -332,7 +360,7 @@ function cmd_validate(agent) {
   }
 
   if (agent === 'frontend') {
-    if ((state.meetings || {})['cross-review'] !== 'resolved') {
+    if (getMeetingStatus(state, 'cross-review') !== 'resolved') {
       console.log('PIPELINE STOPPED');
       console.log(`Agent: ${agent}`);
       console.log('Waiting on: cross-review meeting resolution');
@@ -399,7 +427,7 @@ function cmd_checkpoint(label) {
       console.error('Run: node orchestrate.js advance qa-run');
       process.exit(1);
     }
-    if ((state.meetings || {})['sprint-review'] !== 'resolved') {
+    if (getMeetingStatus(state, 'sprint-review') !== 'resolved') {
       console.error('Cannot approve CHECKPOINT B before the sprint-review meeting is resolved.');
       console.error('Run: node orchestrate.js meeting start sprint-review');
       process.exit(1);
@@ -682,10 +710,10 @@ function cmd_report() {
   if (!anyDone) lines.push('  (nothing completed yet)');
 
   // Meetings
-  const meetings = state.meetings || {};
-  if (meetings.kickoff === 'resolved')       lines.push('  ✓ Kickoff meeting held');
-  if (meetings['cross-review'] === 'resolved') lines.push('  ✓ Cross-review meeting held — Design & Backend aligned');
-  if (meetings['sprint-review'] === 'resolved') lines.push('  ✓ Sprint review meeting held');
+  const meetings = normalizeMeetings(state.meetings);
+  if (meetings.kickoff.status === 'resolved')       lines.push('  ✓ Kickoff meeting held');
+  if (meetings['cross-review'].status === 'resolved') lines.push('  ✓ Cross-review meeting held — Design & Backend aligned');
+  if (meetings['sprint-review'].status === 'resolved') lines.push('  ✓ Sprint review meeting held');
 
   // Checkpoints
   const checkpoints = state.checkpoints || {};
@@ -722,13 +750,13 @@ function cmd_report() {
 
   // ── Meetings pending ──────────────────────────────────
   const meetingsPending = [];
-  if (meetings.kickoff !== 'resolved' && state.completed.includes('pm')) {
+  if (meetings.kickoff.status !== 'resolved' && state.completed.includes('pm')) {
     meetingsPending.push('Kickoff meeting — run: node orchestrate.js meeting start kickoff');
   }
-  if (meetings['cross-review'] !== 'resolved' && state.completed.includes('backend') && state.completed.includes('design')) {
+  if (meetings['cross-review'].status !== 'resolved' && state.completed.includes('backend') && state.completed.includes('design')) {
     meetingsPending.push('Cross-review meeting — run: node orchestrate.js meeting start cross-review');
   }
-  if (meetings['sprint-review'] !== 'resolved' && state.completed.includes('qa-run')) {
+  if (meetings['sprint-review'].status !== 'resolved' && state.completed.includes('qa-run')) {
     meetingsPending.push('Sprint review meeting — run: node orchestrate.js meeting start sprint-review');
   }
   if (meetingsPending.length > 0) {
@@ -911,7 +939,11 @@ function cmd_sprint(subcommand, ...args) {
     // Reset sprint-level state
     state.completed = state.completed.filter(a => ['spec', 'arch'].includes(a));
     state.checkpoints = { A: 'approved', B: 'pending' };
-    state.meetings = { kickoff: 'pending', 'cross-review': 'pending', 'sprint-review': 'pending' };
+    state.meetings = {
+      kickoff: createMeetingRecord(),
+      'cross-review': createMeetingRecord(),
+      'sprint-review': createMeetingRecord(),
+    };
     writeState(state);
     console.log(`✓ Sprint ${sprint} archived. Starting Sprint ${sprint + 1}.`);
     console.log(`  Previous sprints: ${history.length} completed`);
@@ -939,26 +971,18 @@ function cmd_meeting(subcommand, arg) {
   const meetingDir = path.join(process.cwd(), MEETING_DIR);
 
   if (!subcommand || subcommand === 'status') {
-    // List all meetings and their status
-    if (!fs.existsSync(meetingDir)) {
-      console.log('\nNo meetings directory found — no meetings have been run yet.\n');
-      return;
-    }
-    const files = fs.readdirSync(meetingDir).filter(f => f.endsWith('.md')).sort();
-    if (files.length === 0) {
-      console.log('\nNo meetings recorded yet.\n');
-      return;
-    }
-    console.log(`\nMeetings (${files.length} total)\n`);
-    for (const file of files) {
-      const content = fs.readFileSync(path.join(meetingDir, file), 'utf8');
-      const titleLine = content.split('\n').find(l => l.startsWith('# Meeting:'));
-      const statusLine = content.split('\n').find(l => l.includes('**Status:**'));
-      const title = titleLine ? titleLine.replace('# Meeting: ', '') : file;
-      const status = statusLine ? statusLine.replace(/.*\*\*Status:\*\*\s*/, '').split('→').pop().trim() : '—';
-      const icon = status.includes('RESOLVED') ? '✓' : status.includes('ESCALATED') ? '⚠' : '○';
+    const state = syncState(readState());
+    const meetings = normalizeMeetings(state.meetings);
+    console.log(`\nMeetings (${Object.keys(MEETING_TYPES).length} tracked)\n`);
+    for (const type of Object.keys(MEETING_TYPES)) {
+      const record = meetings[type];
+      const title = type === 'sprint-review' ? 'Sprint Review' : type === 'cross-review' ? 'Cross-review' : 'Kickoff';
+      const icon = record.status === 'resolved' ? '✓' : record.status === 'escalated' ? '⚠' : record.status === 'open' ? '◐' : '○';
       console.log(`  ${icon} ${title}`);
-      console.log(`    Status: ${status}   File: meetings/${file}`);
+      console.log(`    Status: ${record.status.toUpperCase()}   File: ${record.file ? `meetings/${record.file}` : '—'}`);
+      if (record.updatedAt) {
+        console.log(`    Updated: ${record.updatedAt}`);
+      }
       console.log('');
     }
     return;
@@ -1018,6 +1042,9 @@ function cmd_meeting(subcommand, arg) {
     }
 
     fs.writeFileSync(filepath, content);
+    state.meetings = normalizeMeetings(state.meetings);
+    state.meetings[type] = createMeetingRecord('open', filename, new Date().toISOString());
+    writeState(state);
     console.log(`✓ Meeting created: meetings/${filename}`);
     console.log(`  Attendees: ${MEETING_TYPES[type].attendees.join(', ')}`);
     console.log(`  Next: dispatch each agent to write their section, then run:`);
@@ -1050,8 +1077,8 @@ function cmd_meeting(subcommand, arg) {
     fs.writeFileSync(filepath, content);
     const typeMatch = filename.match(/-(kickoff|cross-review|sprint-review)\.md$/);
     if (typeMatch) {
-      state.meetings = state.meetings || {};
-      state.meetings[typeMatch[1]] = newStatus.toLowerCase();
+      state.meetings = normalizeMeetings(state.meetings);
+      state.meetings[typeMatch[1]] = createMeetingRecord(newStatus.toLowerCase(), filename, new Date().toISOString());
       writeState(state);
     }
     console.log(`✓ Meeting closed: meetings/${filename} — Status: ${newStatus}`);

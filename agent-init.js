@@ -57,9 +57,21 @@ const INITIAL_CYCLE_STATE = {
     B: "pending",  // human approves sprint result before DONE
   },
   meetings: {
-    kickoff: "pending",
-    "cross-review": "pending",
-    "sprint-review": "pending",
+    kickoff: {
+      status: "pending",
+      file: null,
+      updatedAt: null,
+    },
+    "cross-review": {
+      status: "pending",
+      file: null,
+      updatedAt: null,
+    },
+    "sprint-review": {
+      status: "pending",
+      file: null,
+      updatedAt: null,
+    },
   },
   artifacts: {
     "intake.md": false,

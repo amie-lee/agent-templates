@@ -20,6 +20,10 @@ function writeArtifact(projectDir, relativePath, content) {
   fs.writeFileSync(fullPath, content);
 }
 
+function readState(projectDir) {
+  return JSON.parse(fs.readFileSync(path.join(projectDir, 'cycle-state.json'), 'utf8'));
+}
+
 const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-templates-'));
 const projectDir = path.join(baseDir, 'review-project');
 
@@ -84,6 +88,9 @@ try {
 assert(blocked, 'cross-review should be blocked until design and backend complete');
 
 run(projectDir, 'orchestrate.js', 'meeting', 'start', 'kickoff');
+let state = readState(projectDir);
+assert(state.meetings.kickoff.status === 'open', 'kickoff should be tracked as open after meeting start');
+assert(state.meetings.kickoff.file === 'sprint-01-kickoff.md', 'kickoff meeting file should be recorded in state');
 run(projectDir, 'orchestrate.js', 'meeting', 'close', 'sprint-01-kickoff.md');
 output = run(projectDir, 'orchestrate.js', 'status');
 assert(output.includes('Phase:     sprint-work'), 'kickoff resolution should unlock parallel sprint work');
@@ -132,6 +139,8 @@ run(projectDir, 'orchestrate.js', 'meeting', 'start', 'sprint-review');
 run(projectDir, 'orchestrate.js', 'meeting', 'close', 'sprint-01-sprint-review.md');
 output = run(projectDir, 'orchestrate.js', 'status');
 assert(output.includes('Phase:     checkpoint-B'), 'checkpoint B should gate DONE.md');
+output = run(projectDir, 'orchestrate.js', 'meeting', 'status');
+assert(output.includes('Status: RESOLVED'), 'meeting status command should use recorded resolved state');
 
 let doneFailed = false;
 try {
