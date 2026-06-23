@@ -34,7 +34,7 @@ const AGENT_CONTRACTS = {
   },
   pm: {
     requires: ['requirements.md', 'use-cases.md', 'architecture-decision.md'],
-    produces: ['PLAN.md'],
+    produces: ['PLAN.md', 'sprint-backlog.md'],
     afterCheckpoint: 'A',   // PM can only run after CHECKPOINT A is approved
   },
   design: {
@@ -155,6 +155,71 @@ function fileExists(name) {
   return fs.existsSync(path.join(process.cwd(), name));
 }
 
+function fileHasTemplateMarkers(name) {
+  const filePath = path.join(process.cwd(), name);
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    return false;
+  }
+
+  const textExtensions = new Set(['.md', '.txt', '.yaml', '.yml', '.json', '.sql', '.sh', '.js', '.ts']);
+  if (!textExtensions.has(path.extname(name))) {
+    return false;
+  }
+
+  const content = fs.readFileSync(filePath, 'utf8');
+  const placeholderPatterns = [
+    /\[TODO[^\]]*\]/,
+    /\[Project Name\]/,
+    /\[DATE\]/,
+    /\[NNN\]/,
+    /\[Type\]/,
+    /\[Agent Name\]/,
+    /\[Next Agent Name\]/,
+    /\[PASTE THE HUMAN'S EXACT REQUEST HERE\]/,
+    /\[Question asked\]/,
+    /\[Human's answer\]/,
+    /\[Story description\]/,
+    /\[Story \d+\]/,
+    /\[What is being built[^\]]*\]/,
+    /\[Primary user[^\]]*\]/,
+    /\[What success looks like[^\]]*\]/,
+  ];
+
+  return placeholderPatterns.some(pattern => pattern.test(content));
+}
+
+function artifactExistsOnDisk(name) {
+  const artifactPath = path.join(process.cwd(), name);
+  if (!fs.existsSync(artifactPath)) return false;
+  if (name.endsWith('/')) return fs.statSync(artifactPath).isDirectory();
+  return fs.statSync(artifactPath).isFile();
+}
+
+function artifactReadyOnDisk(name) {
+  if (!artifactExistsOnDisk(name)) return false;
+  if (name.endsWith('/')) return true;
+  return !fileHasTemplateMarkers(name);
+}
+
+function isTrackedArtifact(state, name) {
+  return Object.prototype.hasOwnProperty.call(state.artifacts || {}, name);
+}
+
+function isArtifactReady(state, name) {
+  if (isTrackedArtifact(state, name)) {
+    return state.artifacts[name] === true && artifactReadyOnDisk(name);
+  }
+  return artifactReadyOnDisk(name);
+}
+
+function listMissingArtifacts(state, names) {
+  return names.filter(name => !isArtifactReady(state, name));
+}
+
+function listIncompleteOutputs(names) {
+  return names.filter(name => !artifactReadyOnDisk(name));
+}
+
 function run(cmd) {
   try {
     const stdout = execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
@@ -230,6 +295,7 @@ function cmd_validate(agent) {
     process.exit(1);
   }
 
+  const state = syncState(readState());
   const contract = AGENT_CONTRACTS[agent];
   if (!contract) {
     console.error(`Unknown agent: ${agent}`);
@@ -245,7 +311,6 @@ function cmd_validate(agent) {
 
   // Check if a required checkpoint must be approved first
   if (contract.afterCheckpoint) {
-    const state = readState();
     const cpStatus = (state.checkpoints || {})[contract.afterCheckpoint];
     if (cpStatus !== 'approved') {
       console.log('PIPELINE STOPPED');
@@ -257,7 +322,6 @@ function cmd_validate(agent) {
   }
 
   if (agent === 'design' || agent === 'backend' || agent === 'qa-planning') {
-    const state = syncState(readState());
     if ((state.meetings || {}).kickoff !== 'resolved') {
       console.log('PIPELINE STOPPED');
       console.log(`Agent: ${agent}`);
@@ -268,7 +332,6 @@ function cmd_validate(agent) {
   }
 
   if (agent === 'frontend') {
-    const state = syncState(readState());
     if ((state.meetings || {})['cross-review'] !== 'resolved') {
       console.log('PIPELINE STOPPED');
       console.log(`Agent: ${agent}`);
@@ -279,8 +342,7 @@ function cmd_validate(agent) {
   }
 
   if (agent === 'qa-run') {
-    const state = syncState(readState());
-    if (!fileExists('verify-report.json')) {
+    if (!isArtifactReady(state, 'verify-report.json')) {
       console.log('PIPELINE STOPPED');
       console.log(`Agent: ${agent}`);
       console.log('Missing: verify-report.json');
@@ -289,7 +351,7 @@ function cmd_validate(agent) {
     }
   }
 
-  const missing = contract.requires.filter(f => !fileExists(f));
+  const missing = listMissingArtifacts(state, contract.requires);
 
   if (missing.length === 0) {
     console.log(`✓ ${agent} is ready to run`);
@@ -379,18 +441,22 @@ function cmd_advance(agent) {
     process.exit(1);
   }
 
-  // Warn if expected produces are missing
-  if (contract) {
-    const missingProduced = contract.produces.filter(f => {
-      if (f.endsWith('/')) {
-        return !fs.existsSync(path.join(process.cwd(), f));
-      }
-      return !fileExists(f);
-    });
-    if (missingProduced.length > 0) {
-      console.warn(`⚠ Warning: ${agent} marked complete but expected outputs are missing:`);
-      missingProduced.forEach(f => console.warn(`  - ${f}`));
-    }
+  const missingPrerequisites = listMissingArtifacts(state, contract.requires);
+  if (missingPrerequisites.length > 0) {
+    console.log('PIPELINE STOPPED');
+    console.log(`Agent: ${agent}`);
+    console.log(`Missing: ${missingPrerequisites.join(', ')}`);
+    console.log('Action needed: Resolve the required inputs before advancing this agent');
+    process.exit(1);
+  }
+
+  const missingProduced = listIncompleteOutputs(contract.produces);
+  if (missingProduced.length > 0) {
+    console.log('PIPELINE STOPPED');
+    console.log(`Agent: ${agent}`);
+    console.log(`Missing: ${missingProduced.join(', ')}`);
+    console.log('Action needed: Create completed outputs for every required artifact before advancing');
+    process.exit(1);
   }
 
   if (!state.completed.includes(agent)) {
@@ -402,7 +468,7 @@ function cmd_advance(agent) {
     state.artifacts = state.artifacts || {};
     for (const f of contract.produces) {
       if (!f.endsWith('/')) {
-        state.artifacts[f] = fileExists(f);
+        state.artifacts[f] = artifactReadyOnDisk(f);
       }
     }
   }
@@ -523,7 +589,7 @@ function cmd_run() {
 
     // Validate inputs before dispatching
     if (contract) {
-      const missing = contract.requires.filter(f => !fileExists(f));
+      const missing = listMissingArtifacts(state, contract.requires);
       if (missing.length > 0) {
         console.log('\nPIPELINE STOPPED');
         console.log(`Agent: ${agent}`);
