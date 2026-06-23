@@ -1,11 +1,37 @@
 {
   "name": "agent-init",
   "version": "1.0.0",
-  "description": "Scaffold a multi-agent development project. Generates PLAN.md and agent prompt files.",
-  "main": "agent-init.js",
+  "description": "Scaffold and operate a multi-agent development project with Claude Code attachment and a local dashboard.",
+  "main": "agent.js",
   "bin": {
+    "agent": "./agent.js",
     "agent-init": "./agent-init.js"
   },
+  "files": [
+    "agent.js",
+    "agent-init.js",
+    "README.md",
+    "CLAUDE.template.md",
+    "PLAN.template.md",
+    "meeting.template.md",
+    "requirements.template.md",
+    "use-cases.template.md",
+    "intent.template.md",
+    "intake.template.md",
+    "sprint-backlog.template.md",
+    "sprint-plan.template.md",
+    "adr.template.md",
+    "orchestrate.template.js",
+    "agent-arch.md",
+    "agent-backend.md",
+    "agent-design.md",
+    "agent-frontend.md",
+    "agent-orchestrator.md",
+    "agent-pm.md",
+    "agent-qa.md",
+    "agent-spec.md",
+    "lib"
+  ],
   "scripts": {
     "test": "node smoke-test.js"
   },

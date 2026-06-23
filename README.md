@@ -3,7 +3,7 @@
 A scaffolding system for running a structured team of AI agents that plans, designs, builds, and tests software — sprint by sprint, with a human in the loop at every critical decision.
 
 ```bash
-node agent-init.js my-project
+agent init my-project
 ```
 
 ---
@@ -110,36 +110,41 @@ DONE.md  (or)  node orchestrate.js sprint next → Sprint N+1
 
 ```bash
 # 1. Scaffold a new project
-node agent-init.js my-project
+agent init my-project
 cd my-project
 
-# 2. Run the Spec Agent
-#    Hand agents/agent-spec.md to Claude with your project idea.
-#    It will interview you, write intake.md, then requirements.md etc.
+# 2. Attach Claude Code
+agent attach
 
-# 3. Check project status at any time
-node orchestrate.js report
+# 3. Launch the local dashboard
+agent dashboard
 
-# 4. Step through the pipeline
-node orchestrate.js status
-node orchestrate.js validate <agent>
-node orchestrate.js advance <agent>
+# 4. Start the first agent
+agent run spec
 
-# 5. Manage sprints
-node orchestrate.js sprint status
-node orchestrate.js sprint next      # start next sprint
+# 5. Check project status at any time
+agent report
 
-# 6. Run meetings
-node orchestrate.js meeting start kickoff
-node orchestrate.js meeting start cross-review
-node orchestrate.js meeting start sprint-review
+# 6. Step through the pipeline
+agent status
+agent validate <agent>
+agent advance <agent>
 
-# 7. Approve checkpoints
-node orchestrate.js checkpoint A     # after architecture
-node orchestrate.js checkpoint B     # after QA
+# 7. Manage sprints
+agent sprint status
+agent sprint next      # start next sprint
 
-# 8. View all decisions
-node orchestrate.js adr
+# 8. Run meetings
+agent meeting start kickoff
+agent meeting start cross-review
+agent meeting start sprint-review
+
+# 9. Approve checkpoints
+agent checkpoint A     # after architecture
+agent checkpoint B     # after QA
+
+# 10. View all decisions
+agent adr
 ```
 
 ---
@@ -185,6 +190,8 @@ my-project/
 ├── orchestrate.js           ← Pipeline controller
 ├── CLAUDE.md                ← Rules for Claude Code auto-pipeline
 ├── cycle-state.json         ← Machine-readable project state
+├── .agent/
+│   └── runtime.json         ← Local Claude Code attachment metadata
 ├── .gitignore
 │
 └── agents/
@@ -213,6 +220,22 @@ my-project/
 | **Frontend** | After cross-review | `/src/`, `api-contract.md` | Reads cross-review decisions first; no silent scope expansion |
 | **QA (Run)** | After Frontend | `qa-report.md`, `e2e/stories.spec.ts` (complete) | Waived contract violations → mandatory ADR |
 | **Orchestrator** | Always | Meetings, `DONE.md` | Facilitates meetings; escalates to human when agents disagree |
+
+---
+
+## Runtime Attachment
+
+This package does not run an LLM by itself. It attaches the scaffolded project to a local Claude Code runtime.
+
+```bash
+agent attach
+agent run spec
+agent dashboard
+```
+
+- `agent attach` detects Claude Code and writes `.agent/runtime.json`
+- `agent run <agent>` prepares `.current-agent`, runtime bootstrap metadata, and launches Claude Code
+- `agent dashboard` starts a local operations UI with runtime, state, meetings, checkpoints, and next actions
 
 ---
 
