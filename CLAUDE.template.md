@@ -116,6 +116,12 @@ spec → arch → [CHECKPOINT A] → pm
 
 After executing the frontend agent, run `node orchestrate.js verify` before calling `advance frontend`. This creates `verify-report.json`, which is required by QA's `validate()`.
 
+`verify` is project-driven:
+- Use `package.json` scripts when present (`typecheck`, `build`, `test`)
+- Fall back to `tsconfig.json` for typecheck if no `typecheck` script exists
+- Use optional `verify.config.json` to override commands or configure Lighthouse
+- Skip checks that are not configured instead of assuming a fixed stack or port
+
 ```bash
 # correct sequence
 node orchestrate.js advance backend

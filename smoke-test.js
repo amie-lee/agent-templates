@@ -154,4 +154,22 @@ run(projectDir, 'orchestrate.js', 'checkpoint', 'B');
 run(projectDir, 'orchestrate.js', 'done');
 assert(fs.existsSync(path.join(projectDir, 'DONE.md')), 'DONE.md should be created after checkpoint B');
 
+const verifyProjectDir = path.join(baseDir, 'verify-project');
+run(repoRoot, initScript, verifyProjectDir);
+writeArtifact(verifyProjectDir, 'package.json', JSON.stringify({
+  name: 'verify-project',
+  version: '1.0.0',
+  scripts: {
+    typecheck: `${nodeBin} -e "process.exit(0)"`,
+    build: `${nodeBin} -e "process.exit(0)"`,
+    test: `${nodeBin} -e "process.exit(0)"`,
+  },
+}, null, 2));
+run(verifyProjectDir, 'orchestrate.js', 'verify');
+const verifyReport = JSON.parse(fs.readFileSync(path.join(verifyProjectDir, 'verify-report.json'), 'utf8'));
+assert(verifyReport.typecheck.success === true, 'verify should use package.json typecheck script');
+assert(verifyReport.build.success === true, 'verify should use package.json build script');
+assert(verifyReport.test.success === true, 'verify should use package.json test script');
+assert(verifyReport.lighthouse.skipped === true, 'verify should skip lighthouse when no URL or command is configured');
+
 console.log('smoke-test passed');

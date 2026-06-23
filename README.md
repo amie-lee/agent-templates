@@ -81,7 +81,7 @@ design-spec.md, design-tokens.md       api-spec.yaml,     requirements — befor
     │
     ▼
 [node orchestrate.js verify]
-  Runs typecheck, build, tests → verify-report.json
+  Runs project-defined verification checks → verify-report.json
     │
     ▼
 [QA Agent — Run]
@@ -272,7 +272,7 @@ node orchestrate.js status                # technical pipeline state
 ```bash
 node orchestrate.js validate <agent>      # check if agent can start
 node orchestrate.js advance <agent>       # mark agent complete
-node orchestrate.js verify                # run build + typecheck + tests
+node orchestrate.js verify                # run package.json / verify.config.json checks
 node orchestrate.js done                  # produce DONE.md
 ```
 

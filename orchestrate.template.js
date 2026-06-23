@@ -264,6 +264,70 @@ function formatLocalDate(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function readJsonFile(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (error) {
+    return null;
+  }
+}
+
+function loadPackageJson() {
+  return readJsonFile(path.join(process.cwd(), 'package.json'));
+}
+
+function loadVerifyConfig() {
+  const configPath = path.join(process.cwd(), 'verify.config.json');
+  const config = readJsonFile(configPath);
+  return config && typeof config === 'object' ? config : {};
+}
+
+function createSkippedCheck(reason) {
+  return { skipped: true, reason };
+}
+
+function buildVerifyPlan() {
+  const pkg = loadPackageJson() || {};
+  const scripts = pkg.scripts || {};
+  const config = loadVerifyConfig();
+  const checks = config.checks || {};
+  const lighthouseConfig = config.lighthouse || {};
+
+  const resolveCommand = (name, fallback) => {
+    if (checks[name] && typeof checks[name].command === 'string' && checks[name].command.trim()) {
+      return checks[name].command.trim();
+    }
+    return fallback;
+  };
+
+  return {
+    typecheck: {
+      label: 'typecheck',
+      command: resolveCommand('typecheck', scripts.typecheck ? 'npm run typecheck' : (fs.existsSync(path.join(process.cwd(), 'tsconfig.json')) ? 'npx tsc --noEmit' : null)),
+      skipReason: 'No typecheck script or tsconfig.json found',
+    },
+    build: {
+      label: 'build',
+      command: resolveCommand('build', scripts.build ? 'npm run build' : null),
+      skipReason: 'No build script found in package.json',
+    },
+    test: {
+      label: 'test',
+      command: resolveCommand('test', scripts.test ? 'npm run test' : null),
+      skipReason: 'No test script found in package.json',
+    },
+    lighthouse: {
+      label: 'lighthouse',
+      command: lighthouseConfig.command || null,
+      url: typeof lighthouseConfig.url === 'string' ? lighthouseConfig.url : null,
+      skipReason: lighthouseConfig.enabled === false
+        ? 'Lighthouse disabled in verify.config.json'
+        : 'No lighthouse command or URL configured',
+    },
+  };
+}
+
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 function cmd_status() {
@@ -511,6 +575,7 @@ function cmd_advance(agent) {
 function cmd_verify() {
   console.log('Running verification suite...\n');
 
+  const plan = buildVerifyPlan();
   const report = {
     timestamp: new Date().toISOString(),
     typecheck: null,
@@ -519,41 +584,48 @@ function cmd_verify() {
     lighthouse: null,
   };
 
-  console.log('  typecheck...');
-  report.typecheck = run('npx tsc --noEmit');
-  console.log(report.typecheck.success ? '  ✓ typecheck' : '  ✗ typecheck');
+  for (const key of ['typecheck', 'build', 'test']) {
+    const check = plan[key];
+    console.log(`  ${check.label}...`);
+    if (!check.command) {
+      report[key] = createSkippedCheck(check.skipReason);
+      console.log(`  ⚠ ${check.label} skipped — ${check.skipReason}`);
+      continue;
+    }
 
-  console.log('  build...');
-  report.build = run('npm run build');
-  console.log(report.build.success ? '  ✓ build' : '  ✗ build');
+    report[key] = run(check.command);
+    report[key].command = check.command;
+    console.log(report[key].success ? `  ✓ ${check.label}` : `  ✗ ${check.label}`);
+  }
 
-  console.log('  test...');
-  report.test = run('npm run test -- --run');
-  console.log(report.test.success ? '  ✓ test' : '  ✗ test');
-
-  // Lighthouse: only if dev server is reachable
   console.log('  lighthouse...');
-  const serverCheck = run('curl -s -o /dev/null -w "%{http_code}" http://localhost:5173');
-  if (serverCheck.success && serverCheck.output.trim() === '200') {
+  if (plan.lighthouse.command) {
+    report.lighthouse = run(plan.lighthouse.command);
+    report.lighthouse.command = plan.lighthouse.command;
+    console.log(report.lighthouse.success ? '  ✓ lighthouse' : '  ✗ lighthouse');
+  } else if (plan.lighthouse.url) {
     report.lighthouse = run(
-      'npx lighthouse http://localhost:5173 --output=json --output-path=./lighthouse-report.json --chrome-flags="--headless"'
+      `npx lighthouse ${plan.lighthouse.url} --output=json --output-path=./lighthouse-report.json --chrome-flags="--headless"`
     );
+    report.lighthouse.command = `npx lighthouse ${plan.lighthouse.url} --output=json --output-path=./lighthouse-report.json --chrome-flags="--headless"`;
     console.log(report.lighthouse.success ? '  ✓ lighthouse' : '  ✗ lighthouse');
   } else {
-    report.lighthouse = { skipped: true, reason: 'dev server not running on localhost:5173' };
-    console.log('  ⚠ lighthouse skipped — start dev server first');
+    report.lighthouse = createSkippedCheck(plan.lighthouse.skipReason);
+    console.log(`  ⚠ lighthouse skipped — ${plan.lighthouse.skipReason}`);
   }
 
   fs.writeFileSync('verify-report.json', JSON.stringify(report, null, 2));
 
   const checks = [report.typecheck, report.build, report.test];
-  const passed = checks.filter(r => r && r.success).length;
+  const requiredChecks = checks.filter(r => r && !r.skipped);
+  const passed = requiredChecks.filter(r => r && r.success).length;
+  const skipped = checks.filter(r => r && r.skipped).length;
   const skippedLH = report.lighthouse && report.lighthouse.skipped;
 
-  console.log(`\nVerify complete: ${passed}/3 checks passed${skippedLH ? ' (lighthouse skipped)' : ''}`);
+  console.log(`\nVerify complete: ${passed}/${requiredChecks.length} required checks passed${skipped > 0 ? `, ${skipped} skipped` : ''}${skippedLH ? ' (lighthouse skipped)' : ''}`);
   console.log('Written: verify-report.json');
 
-  const allPassed = checks.every(r => r && r.success);
+  const allPassed = requiredChecks.every(r => r && r.success);
   process.exit(allPassed ? 0 : 1);
 }
 
