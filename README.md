@@ -155,9 +155,10 @@ my-project/
 ├── requirements.md          ← Structured requirements (FR, NFR, MoSCoW priorities)
 ├── use-cases.md             ← Actor map + use case flows
 ├── intent.md                ← Project type, scale, quality priorities
+├── sprint-plan.template.md  ← PM template for sprint-N-plan.md
 │
-├── PLAN.md                  ← Current sprint scope (what agents build NOW)
-├── sprint-backlog.md        ← Everything deferred + mid-sprint discoveries
+├── PLAN.md                  ← Current sprint scope (starts as a template, later replaced by PM output)
+├── sprint-backlog.md        ← Deferred work template, later updated during the sprint
 │
 ├── design-spec.md           ← Screen-by-screen UI spec
 ├── design-tokens.md         ← Colors, spacing, typography
@@ -179,7 +180,7 @@ my-project/
 │   ├── meeting.template.md
 │   ├── sprint-01-kickoff.md
 │   ├── sprint-01-cross-review.md
-│   └── sprint-01-review.md
+│   └── sprint-01-sprint-review.md
 │
 ├── orchestrate.js           ← Pipeline controller
 ├── CLAUDE.md                ← Rules for Claude Code auto-pipeline

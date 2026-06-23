@@ -39,11 +39,23 @@ run(projectDir, 'orchestrate.js', 'advance', 'spec');
 output = run(projectDir, 'orchestrate.js', 'status');
 assert(output.includes('Phase:     arch'), 'after spec the next phase should be arch');
 
+let blocked = false;
+try {
+  run(projectDir, 'orchestrate.js', 'checkpoint', 'A');
+} catch (error) {
+  blocked = true;
+}
+assert(blocked, 'checkpoint A should be blocked before architecture completes');
+
 run(projectDir, 'orchestrate.js', 'advance', 'arch');
 output = run(projectDir, 'orchestrate.js', 'status');
 assert(output.includes('Phase:     checkpoint-A'), 'after arch the pipeline should wait for checkpoint A');
 assert(output.includes('Pending:   none'), 'checkpoint wait should not dispatch PM');
 
+fs.writeFileSync(path.join(projectDir, 'architecture-decision.md'), '# Architecture Decision\n');
+writeState(projectDir, state => {
+  state.artifacts['architecture-decision.md'] = true;
+});
 run(projectDir, 'orchestrate.js', 'checkpoint', 'A');
 output = run(projectDir, 'orchestrate.js', 'status');
 assert(output.includes('Phase:     pm'), 'after checkpoint A the PM phase should unlock');
@@ -51,6 +63,14 @@ assert(output.includes('Phase:     pm'), 'after checkpoint A the PM phase should
 run(projectDir, 'orchestrate.js', 'advance', 'pm');
 output = run(projectDir, 'orchestrate.js', 'status');
 assert(output.includes('Phase:     meeting-kickoff'), 'after PM the kickoff meeting should gate progress');
+
+blocked = false;
+try {
+  run(projectDir, 'orchestrate.js', 'meeting', 'start', 'cross-review');
+} catch (error) {
+  blocked = true;
+}
+assert(blocked, 'cross-review should be blocked until design and backend complete');
 
 run(projectDir, 'orchestrate.js', 'meeting', 'start', 'kickoff');
 run(projectDir, 'orchestrate.js', 'meeting', 'close', 'sprint-01-kickoff.md');
@@ -82,8 +102,20 @@ run(projectDir, 'orchestrate.js', 'advance', 'qa-run');
 output = run(projectDir, 'orchestrate.js', 'status');
 assert(output.includes('Phase:     meeting-sprint-review'), 'sprint review should gate checkpoint B');
 
+blocked = false;
+try {
+  run(projectDir, 'orchestrate.js', 'checkpoint', 'B');
+} catch (error) {
+  blocked = true;
+}
+assert(blocked, 'checkpoint B should be blocked before sprint-review resolves');
+
 run(projectDir, 'orchestrate.js', 'meeting', 'start', 'sprint-review');
 run(projectDir, 'orchestrate.js', 'meeting', 'close', 'sprint-01-sprint-review.md');
+fs.writeFileSync(path.join(projectDir, 'qa-report.md'), '# QA Report\n');
+writeState(projectDir, state => {
+  state.artifacts['qa-report.md'] = true;
+});
 output = run(projectDir, 'orchestrate.js', 'status');
 assert(output.includes('Phase:     checkpoint-B'), 'checkpoint B should gate DONE.md');
 

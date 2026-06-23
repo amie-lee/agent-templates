@@ -318,6 +318,36 @@ function cmd_checkpoint(label) {
   }
   const cp = label.toUpperCase();
   const state = syncState(readState());
+
+  if (cp === 'A') {
+    if (!state.completed.includes('arch')) {
+      console.error('Cannot approve CHECKPOINT A before the Architecture agent completes.');
+      console.error('Run: node orchestrate.js advance arch');
+      process.exit(1);
+    }
+    if (!fileExists('requirements.md') || !fileExists('architecture-decision.md')) {
+      console.error('Cannot approve CHECKPOINT A without requirements.md and architecture-decision.md.');
+      process.exit(1);
+    }
+  }
+
+  if (cp === 'B') {
+    if (!state.completed.includes('qa-run')) {
+      console.error('Cannot approve CHECKPOINT B before QA Run completes.');
+      console.error('Run: node orchestrate.js advance qa-run');
+      process.exit(1);
+    }
+    if ((state.meetings || {})['sprint-review'] !== 'resolved') {
+      console.error('Cannot approve CHECKPOINT B before the sprint-review meeting is resolved.');
+      console.error('Run: node orchestrate.js meeting start sprint-review');
+      process.exit(1);
+    }
+    if (!fileExists('qa-report.md')) {
+      console.error('Cannot approve CHECKPOINT B without qa-report.md.');
+      process.exit(1);
+    }
+  }
+
   state.checkpoints = state.checkpoints || {};
   state.checkpoints[cp] = 'approved';
   writeState(state);
@@ -879,7 +909,25 @@ function cmd_meeting(subcommand, arg) {
     if (!fs.existsSync(meetingDir)) {
       fs.mkdirSync(meetingDir, { recursive: true });
     }
-    const state = readState();
+    const state = syncState(readState());
+    const prerequisites = {
+      kickoff: {
+        ok: state.completed.includes('pm'),
+        message: 'PLAN/PM must be complete before the kickoff meeting can start.',
+      },
+      'cross-review': {
+        ok: state.completed.includes('design') && state.completed.includes('backend'),
+        message: 'Design and Backend must both complete before the cross-review meeting can start.',
+      },
+      'sprint-review': {
+        ok: state.completed.includes('qa-run'),
+        message: 'QA Run must complete before the sprint-review meeting can start.',
+      },
+    };
+    if (!prerequisites[type].ok) {
+      console.error(prerequisites[type].message);
+      process.exit(1);
+    }
     const sprint = state.sprint || 1;
     const date = formatLocalDate();
     const filename = `sprint-${String(sprint).padStart(2, '0')}-${type}.md`;
